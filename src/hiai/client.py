@@ -75,7 +75,7 @@ class OpenRouterClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
             "User-Agent": USER_AGENT,
-            "HTTP-Referer": "https://github.com/hiai-ai/hiai",
+            "HTTP-Referer": "https://github.com/toewaioo/hiai",
             "X-Title": "HIAI",
         }
 

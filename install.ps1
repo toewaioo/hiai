@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $HIAI_DIR = "$env:USERPROFILE\.local\share\hiai"
 $VENV_DIR = "$HIAI_DIR\venv"
 $BIN_DIR = "$env:USERPROFILE\.local\bin"
-$REPO_URL = "https://github.com/hiai-ai/hiai.git"
+$REPO_URL = "https://github.com/toewaioo/hiai.git"
 
 function Write-Info($msg)  { Write-Host "✓ $msg" -ForegroundColor Green }
 function Write-Warn($msg)  { Write-Host "⚠ $msg" -ForegroundColor Yellow }

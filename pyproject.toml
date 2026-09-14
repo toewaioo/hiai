@@ -30,8 +30,8 @@ classifiers = [
 hiai = "hiai.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/hiai-ai/hiai"
-Repository = "https://github.com/hiai-ai/hiai"
+Homepage = "https://github.com/toewaioo/hiai"
+Repository = "https://github.com/toewaioo/hiai"
 
 [tool.setuptools.packages.find]
 where = ["src"]

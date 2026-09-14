@@ -19,19 +19,19 @@ HIAI is a local AI terminal coding agent powered by OpenRouter. It helps develop
 ### Quick install (Linux/macOS/WSL)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hiai-ai/hiai/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/toewaioo/hiai/main/install.sh | bash
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/hiai-ai/hiai/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/toewaioo/hiai/main/install.ps1 | iex
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/hiai-ai/hiai.git
+git clone https://github.com/toewaioo/hiai.git
 cd hiai
 python -m venv .venv
 source .venv/bin/activate
