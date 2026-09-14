@@ -42,6 +42,9 @@ def load_config() -> AppConfig:
                 config.max_read_bytes = data.get("max_read_bytes", config.max_read_bytes)
                 config.max_write_bytes = data.get("max_write_bytes", config.max_write_bytes)
                 config.theme = data.get("theme", config.theme)
+                config.search_provider = data.get("search_provider", config.search_provider)
+                config.search_api_key = data.get("search_api_key", config.search_api_key)
+                config.search_max_results = data.get("search_max_results", config.search_max_results)
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -56,6 +59,14 @@ def load_config() -> AppConfig:
     env_base_url = os.environ.get("HIAI_BASE_URL", "")
     if env_base_url:
         config.base_url = env_base_url
+
+    env_search_key = os.environ.get("TAVILY_API_KEY", "")
+    if env_search_key:
+        config.search_api_key = env_search_key
+
+    env_search_provider = os.environ.get("HIAI_SEARCH_PROVIDER", "")
+    if env_search_provider:
+        config.search_provider = env_search_provider
 
     return config
 
@@ -74,6 +85,9 @@ def save_config(config: AppConfig) -> None:
         "max_read_bytes": config.max_read_bytes,
         "max_write_bytes": config.max_write_bytes,
         "theme": config.theme,
+        "search_provider": config.search_provider,
+        "search_api_key": config.search_api_key,
+        "search_max_results": config.search_max_results,
     }
 
     config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -131,6 +145,9 @@ def show_config() -> dict[str, str]:
         "max_read_bytes": str(config.max_read_bytes),
         "max_write_bytes": str(config.max_write_bytes),
         "theme": config.theme,
+        "search_provider": config.search_provider,
+        "search_api_key": "configured" if config.search_api_key else "not configured",
+        "search_max_results": str(config.search_max_results),
     }
 
 
@@ -142,3 +159,28 @@ def require_api_key(config: AppConfig) -> str:
             "Or set the OPENROUTER_API_KEY environment variable."
         )
     return config.api_key
+
+
+def set_search_provider(provider: str) -> None:
+    """Set the search provider in config."""
+    if not provider or not provider.strip():
+        raise ConfigError("Search provider cannot be empty.")
+    config = load_config()
+    config.search_provider = provider.strip()
+    save_config(config)
+
+
+def set_search_key(key: str) -> None:
+    """Set the search API key in config."""
+    if not key or not key.strip():
+        raise ConfigError("Search API key cannot be empty.")
+    config = load_config()
+    config.search_api_key = key.strip()
+    save_config(config)
+
+
+def set_search_max_results(max_results: int) -> None:
+    """Set the max search results in config."""
+    config = load_config()
+    config.search_max_results = max(1, min(10, max_results))
+    save_config(config)

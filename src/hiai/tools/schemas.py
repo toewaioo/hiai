@@ -69,6 +69,44 @@ SEARCH_FILES_SCHEMA = {
     "additionalProperties": False,
 }
 
+RUN_COMMAND_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "command": {
+            "type": "string",
+            "description": "The command to execute.",
+        },
+        "timeout": {
+            "type": "integer",
+            "description": "Maximum execution time in seconds.",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 30,
+        },
+    },
+    "required": ["command"],
+    "additionalProperties": False,
+}
+
+WEB_SEARCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "query": {
+            "type": "string",
+            "description": "The search query.",
+        },
+        "max_results": {
+            "type": "integer",
+            "description": "Maximum number of results.",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+        },
+    },
+    "required": ["query"],
+    "additionalProperties": False,
+}
+
 
 def get_tool_definitions() -> list[dict]:
     """Return all tool definitions for the AI model."""
@@ -103,6 +141,22 @@ def get_tool_definitions() -> list[dict]:
                 "name": "search_files",
                 "description": "Search text inside UTF-8 project files.",
                 "parameters": SEARCH_FILES_SCHEMA,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "run_command",
+                "description": "Run an approved local development command inside the selected project directory.",
+                "parameters": RUN_COMMAND_SCHEMA,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Search the internet for relevant information and return search results with titles, URLs, and snippets.",
+                "parameters": WEB_SEARCH_SCHEMA,
             },
         },
     ]

@@ -18,6 +18,9 @@ class AppConfig:
     max_read_bytes: int = 1_000_000
     max_write_bytes: int = 2_000_000
     theme: str = "auto"
+    search_provider: str = "tavily"
+    search_api_key: str = ""
+    search_max_results: int = 5
 
 
 @dataclass
@@ -33,6 +36,7 @@ class ToolResult:
     matches: list[dict[str, Any]] = field(default_factory=list)
     operation: str = ""
     query: str = ""
+    command: str = ""
 
     def to_json(self) -> dict[str, Any]:
         d: dict[str, Any] = {"status": self.status}
@@ -52,6 +56,8 @@ class ToolResult:
             d["operation"] = self.operation
         if self.query:
             d["query"] = self.query
+        if self.command:
+            d["command"] = self.command
         return d
 
 

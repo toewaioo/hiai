@@ -109,6 +109,41 @@ def cmd_config_reset() -> None:
     success("Configuration reset to defaults.")
 
 
+def cmd_config_set_search_provider(provider: str) -> None:
+    """Set search provider."""
+    if not provider:
+        error("Usage: hiai config set-search-provider <provider>")
+        return
+    from hiai.config import set_search_provider as _set
+    _set(provider)
+    success(f"Search provider set to: {provider}")
+
+
+def cmd_config_set_search_key() -> None:
+    """Set search API key interactively."""
+    from hiai.terminal import prompt_api_key
+    print(_c("yellow", "Enter your Tavily API key (or other search provider key):"))
+    key = prompt_api_key()
+    if key:
+        from hiai.config import set_search_key as _set
+        _set(key)
+        success("Search API key saved.")
+    else:
+        warning("No key entered.")
+
+
+def cmd_config_set_search_max_results(value: str) -> None:
+    """Set max search results."""
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        error("Usage: hiai config set-search-max-results <1-10>")
+        return
+    from hiai.config import set_search_max_results as _set
+    _set(n)
+    success(f"Max search results set to: {n}")
+
+
 def cmd_models() -> None:
     """Handle models subcommand."""
     config = load_config()
@@ -158,6 +193,8 @@ def run_interactive(agent: Agent, project_dir: Path) -> None:
                 status = agent.get_status()
                 for k, v in status.items():
                     print(f"  {k}: {v}")
+            elif cmd == "/tools":
+                _show_tools()
             else:
                 warning(f"Unknown command: {cmd}. Type /help for available commands.")
             continue
@@ -185,9 +222,26 @@ def _show_help() -> None:
     /model    Show current model
     /project  Show project root
     /status   Show session information
+    /tools    Show available AI tools
     /exit     Exit HIAI
     /quit     Exit HIAI
 """)
+
+
+def _show_tools() -> None:
+    """Show available AI tools."""
+    from hiai.tools.schemas import get_tool_definitions
+
+    tools = get_tool_definitions()
+    print(_c("bold", "Available tools:"))
+    print()
+    for tool in tools:
+        func = tool.get("function", {})
+        name = func.get("name", "?")
+        desc = func.get("description", "")
+        print(f"  {_c('green', '✓')} {_c('cyan', name)}")
+        print(f"    {_c('dim', desc)}")
+    print()
 
 
 def run_one_shot(agent: Agent, prompt: str) -> None:
@@ -238,6 +292,14 @@ def _run_config(args: list[str]) -> None:
     elif sub == "set-base-url":
         value = args[1] if len(args) > 1 else ""
         cmd_config_set_base_url(value)
+    elif sub == "set-search-provider":
+        value = args[1] if len(args) > 1 else ""
+        cmd_config_set_search_provider(value)
+    elif sub == "set-search-key":
+        cmd_config_set_search_key()
+    elif sub == "set-search-max-results":
+        value = args[1] if len(args) > 1 else ""
+        cmd_config_set_search_max_results(value)
     elif sub == "reset":
         cmd_config_reset()
     else:

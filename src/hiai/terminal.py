@@ -73,6 +73,33 @@ def tool_error(tool_name: str, message: str) -> None:
     print(_c("red", f"✗ Tool error ({tool_name}): {message}"))
 
 
+def prompt_command(command: str, project_root: str, timeout: int) -> bool:
+    """Prompt user to approve a command execution."""
+    print(_c("yellow", "┌─ Command execution requested " + "─" * 20))
+    print(_c("yellow", f"│ Command: {command}"))
+    print(_c("yellow", f"│ Directory: {project_root}"))
+    print(_c("yellow", f"│ Timeout: {timeout} seconds"))
+    print(_c("yellow", "└" + "─" * 40))
+
+    try:
+        answer = input(_c("bold", "Allow command? [y/N]: ")).strip().lower()
+        return answer in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+
+def tool_search_start(query: str) -> None:
+    """Show search execution start."""
+    print(_c("cyan", f"⚙ Tool: web_search"))
+    print(_c("dim", f"  🔎 Query: {query}"))
+
+
+def tool_command_start(command: str) -> None:
+    """Show command execution start."""
+    print(_c("cyan", f"⚙ Tool: run_command"))
+    print(_c("dim", f"  ⌘ Command: {command}"))
+
+
 def prompt_write(path: str, is_new: bool, size: int) -> bool:
     """Prompt user to approve a file write."""
     op = "Create" if is_new else "Update"

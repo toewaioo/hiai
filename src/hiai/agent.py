@@ -35,7 +35,7 @@ class Agent:
             api_key=config.api_key,
             timeout=config.timeout,
         )
-        self.registry = ToolRegistry(project_root, auto_approve=auto_approve)
+        self.registry = ToolRegistry(project_root, auto_approve=auto_approve, config=config)
         self.messages: list[dict[str, Any]] = []
         self._init_messages()
 
