@@ -1,0 +1,5 @@
+# HIAI has no required third-party dependencies.
+# It uses only Python standard library modules.
+# 
+# Development/testing dependencies (optional):
+# pytest>=7.0

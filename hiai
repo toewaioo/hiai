@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+# ╦ ╦╦╔═╗╦
+# ╠═╣║╠═╝║
+# ╩ ╩╩╩  ╩
+# HIAI - Local AI Terminal Coding Agent
+
+HIAI_HOME="${HIAI_HOME:-$(cd "$(dirname "$0")" && pwd)}"
+SRC_DIR="${HIAI_HOME}/src"
+
+if [ ! -d "${SRC_DIR}/hiai" ]; then
+    echo "Error: HIAI source not found at ${SRC_DIR}" >&2
+    exit 1
+fi
+
+export PYTHONPATH="${SRC_DIR}${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m hiai "$@"
