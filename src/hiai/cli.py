@@ -19,6 +19,7 @@ from hiai.config import (
     show_config,
 )
 from hiai.exceptions import APIKeyError, ConfigError, HIAIError
+from hiai.markdown import print_markdown
 from hiai.models import AppConfig
 from hiai.terminal import (
     error,
@@ -165,7 +166,7 @@ def run_interactive(agent: Agent, project_dir: Path) -> None:
             response = agent.chat(user_input)
             if response:
                 print()
-                print(response)
+                print_markdown(response)
         except HIAIError as e:
             error(str(e))
         except KeyboardInterrupt:
@@ -194,7 +195,7 @@ def run_one_shot(agent: Agent, prompt: str) -> None:
     try:
         response = agent.chat(prompt)
         if response:
-            print(response)
+            print_markdown(response)
     except HIAIError as e:
         error(str(e))
         sys.exit(1)
