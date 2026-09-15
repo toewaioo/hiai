@@ -3,7 +3,54 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class AgentState(Enum):
+    """Agent execution states."""
+
+    IDLE = "idle"
+    THINKING = "thinking"
+    READING = "reading"
+    WRITING = "writing"
+    EXECUTING = "executing"
+    SEARCHING = "searching"
+    WAITING_APPROVAL = "waiting_approval"
+    ERROR = "error"
+    DEAD = "dead"
+
+    @property
+    def icon(self) -> str:
+        """Return display icon for state."""
+        icons = {
+            AgentState.IDLE: "○",
+            AgentState.THINKING: "◎",
+            AgentState.READING: "📄",
+            AgentState.WRITING: "✏️",
+            AgentState.EXECUTING: "⌘",
+            AgentState.SEARCHING: "🔎",
+            AgentState.WAITING_APPROVAL: "?",
+            AgentState.ERROR: "✗",
+            AgentState.DEAD: "💀",
+        }
+        return icons.get(self, "·")
+
+    @property
+    def description(self) -> str:
+        """Return human-readable description."""
+        descriptions = {
+            AgentState.IDLE: "Idle",
+            AgentState.THINKING: "Thinking",
+            AgentState.READING: "Reading file",
+            AgentState.WRITING: "Writing file",
+            AgentState.EXECUTING: "Executing command",
+            AgentState.SEARCHING: "Searching",
+            AgentState.WAITING_APPROVAL: "Waiting for approval",
+            AgentState.ERROR: "Error occurred",
+            AgentState.DEAD: "Agent stopped",
+        }
+        return descriptions.get(self, "Unknown")
 
 
 @dataclass

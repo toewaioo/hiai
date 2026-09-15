@@ -58,8 +58,10 @@ class ToolRegistry:
                     f"Invalid arguments type: {type(arguments)}"
                 )
         except json.JSONDecodeError as e:
+            raw = arguments[:200] if isinstance(arguments, str) else str(arguments)[:200]
             raise MalformedToolCallError(
-                f"Invalid JSON in tool arguments: {e}"
+                f"Malformed JSON in tool '{name}' arguments: {e}. "
+                f"Raw: {raw}"
             ) from e
 
         try:

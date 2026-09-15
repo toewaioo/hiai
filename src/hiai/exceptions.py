@@ -24,6 +24,16 @@ class APIRequestError(ClientError):
 class APIResponseError(ClientError):
     """API returned an error response."""
 
+    def __init__(self, message: str = "", code: int | None = None, **kwargs: object) -> None:
+        super().__init__(message, **kwargs)
+        self.message = message
+        self.code = code
+
+    def __str__(self) -> str:
+        if self.code:
+            return f"[{self.code}] {self.message}"
+        return self.message
+
 
 class RateLimitError(APIResponseError):
     """Rate limit exceeded."""

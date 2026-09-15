@@ -190,24 +190,21 @@ def run_command(
 
     # Check if command is allowed
     if not is_command_allowed(command, allowed_prefixes):
-        if not auto_approve:
-            approved = prompt_command_approval(command, str(project_root), timeout)
-            if not approved:
-                return ToolResult(
-                    status="cancelled",
-                    message="User denied command execution.",
-                )
-        else:
+        if auto_approve:
             return ToolResult(
                 status="error",
                 message=(
                     f"Command '{_get_command_base(command)}' is not in the allowed command list. "
-                    "Use --yes to approve non-listed commands interactively."
+                    "Run in interactive mode to approve non-listed commands."
                 ),
             )
-
-    # Auto-approve still asks for allowed commands if not in auto_approve mode
-    if not auto_approve:
+        approved = prompt_command_approval(command, str(project_root), timeout)
+        if not approved:
+            return ToolResult(
+                status="cancelled",
+                message="User denied command execution.",
+            )
+    elif not auto_approve:
         approved = prompt_command_approval(command, str(project_root), timeout)
         if not approved:
             return ToolResult(

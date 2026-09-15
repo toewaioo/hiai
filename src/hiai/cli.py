@@ -22,6 +22,7 @@ from hiai.exceptions import APIKeyError, ConfigError, HIAIError
 from hiai.markdown import print_markdown
 from hiai.models import AppConfig
 from hiai.terminal import (
+    _c,
     error,
     info,
     print_banner,
