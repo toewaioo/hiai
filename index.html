@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HIAI — a local-first AI terminal coding agent built with Python.">
+    <title>HIAI — Local AI Terminal Coding Agent</title>
+    <style>
+        :root {
+            --bg: #f6f7fb;
+            --bg-soft: #eef0f7;
+            --surface: #ffffff;
+            --surface-muted: #f8f9fc;
+            --text: #172033;
+            --muted: #687086;
+            --line: #e4e7ef;
+            --primary: #5b54e8;
+            --primary-2: #8a5cf6;
+            --primary-soft: #eeedff;
+            --cyan: #14b8c7;
+            --success: #16a36a;
+            --warning: #d97706;
+            --code: #151824;
+            --code-text: #dce4f5;
+            --shadow-sm: 0 8px 24px rgba(32, 36, 64, 0.07);
+            --shadow-lg: 0 24px 60px rgba(57, 48, 132, 0.14);
+            --radius: 18px;
+            --max: 1160px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            margin: 0;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 8% 8%, rgba(91, 84, 232, 0.10), transparent 28rem),
+                radial-gradient(circle at 90% 15%, rgba(20, 184, 199, 0.08), transparent 26rem),
+                var(--bg);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            line-height: 1.65;
+            overflow-x: hidden;
+        }
+
+        a { color: inherit; text-decoration: none; }
+        button, input { font: inherit; }
+
+        .shell {
+            width: min(calc(100% - 40px), var(--max));
+            margin-inline: auto;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            border-bottom: 1px solid rgba(228, 231, 239, 0.8);
+            background: rgba(246, 247, 251, 0.82);
+            backdrop-filter: blur(18px);
+        }
+
+        .nav {
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 11px;
+            font-size: 1.15rem;
+            font-weight: 850;
+            letter-spacing: -0.03em;
+        }
+
+        .brand-mark {
+            width: 38px;
+            height: 38px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            color: white;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 10px 24px rgba(91, 84, 232, 0.28);
+        }
+
+        .brand-mark svg { width: 22px; height: 22px; }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 650;
+        }
+
+        .nav-links a { transition: color 160ms ease; }
+        .nav-links a:hover { color: var(--primary); }
+
+        .theme-toggle {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            color: var(--text);
+            background: var(--surface);
+            cursor: pointer;
+            transition: transform 160ms ease, border-color 160ms ease;
+        }
+
+        .theme-toggle:hover { transform: rotate(8deg); border-color: #c9c5ff; }
+        .theme-toggle svg { width: 19px; height: 19px; }
+
+        .hero {
+            position: relative;
+            padding: 96px 0 82px;
+        }
+
+        .hero::before {
+            content: "";
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            width: 760px;
+            height: 420px;
+            transform: translateX(-50%);
+            background: linear-gradient(90deg, transparent, rgba(91, 84, 232, 0.08), transparent);
+            filter: blur(2px);
+            pointer-events: none;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 12px;
+            border: 1px solid #dedbfa;
+            border-radius: 999px;
+            color: #5549cf;
+            background: rgba(255, 255, 255, 0.78);
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .eyebrow-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 0 5px rgba(22, 163, 106, 0.11);
+        }
+
+        .hero h1 {
+            max-width: 850px;
+            margin: 22px 0 18px;
+            font-size: clamp(3rem, 8vw, 6.7rem);
+            line-height: 0.93;
+            letter-spacing: -0.075em;
+        }
+
+        .gradient-text {
+            color: transparent;
+            background: linear-gradient(100deg, var(--primary), var(--primary-2) 48%, var(--cyan));
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .hero-copy {
+            max-width: 690px;
+            color: var(--muted);
+            font-size: clamp(1.05rem, 2vw, 1.22rem);
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 30px;
+        }
+
+        .button {
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            padding: 0 18px;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            font-weight: 750;
+            cursor: pointer;
+            transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        }
+
+        .button:hover { transform: translateY(-2px); }
+        .button-primary { color: white; background: linear-gradient(135deg, var(--primary), var(--primary-2)); box-shadow: 0 12px 28px rgba(91, 84, 232, 0.25); }
+        .button-secondary { color: var(--text); border-color: var(--line); background: var(--surface); box-shadow: var(--shadow-sm); }
+        .button svg { width: 18px; height: 18px; }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            margin-top: 56px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--line);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .stat {
+            min-width: 0;
+            padding: 20px 22px;
+            background: rgba(255, 255, 255, 0.88);
+        }
+
+        .stat strong {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 1.22rem;
+            letter-spacing: -0.03em;
+        }
+
+        .stat span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.82rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .section { padding: 86px 0; }
+
+        .section-heading {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .section-kicker {
+            margin: 0 0 8px;
+            color: var(--primary);
+            font-size: 0.75rem;
+            font-weight: 850;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .section h2 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.25rem);
+            line-height: 1.08;
+            letter-spacing: -0.055em;
+        }
+
+        .section-intro {
+            max-width: 560px;
+            margin: 10px 0 0;
+            color: var(--muted);
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .card {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-pad { padding: 25px; }
+
+        .icon {
+            width: 43px;
+            height: 43px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 18px;
+            border-radius: 13px;
+            color: var(--primary);
+            background: var(--primary-soft);
+        }
+
+        .icon svg { width: 21px; height: 21px; }
+        .card h3 { margin: 0 0 8px; font-size: 1.08rem; letter-spacing: -0.02em; }
+        .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+
+        .feature-card:nth-child(2) .icon { color: #a855f7; background: #f4eaff; }
+        .feature-card:nth-child(3) .icon { color: #0891b2; background: #e2fafc; }
+        .feature-card:nth-child(4) .icon { color: #059669; background: #e5f8f0; }
+        .feature-card:nth-child(5) .icon { color: #c2410c; background: #fff0e5; }
+        .feature-card:nth-child(6) .icon { color: #7c3aed; background: #f1eaff; }
+
+        .architecture-wrap {
+            display: grid;
+            grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+            align-items: center;
+            gap: 42px;
+        }
+
+        .architecture-copy p { color: var(--muted); }
+
+        .architecture-list {
+            display: grid;
+            gap: 12px;
+            margin-top: 25px;
+        }
+
+        .architecture-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 15px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.72);
+            font-size: 0.9rem;
+        }
+
+        .architecture-item span:first-child { color: var(--primary); font-weight: 800; }
+
+        .terminal {
+            overflow: hidden;
+            border: 1px solid #2c3142;
+            border-radius: 17px;
+            background: var(--code);
+            box-shadow: 0 28px 70px rgba(20, 22, 35, 0.28);
+        }
+
+        .terminal-bar {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 13px 16px;
+            border-bottom: 1px solid #2c3142;
+        }
+
+        .terminal-dot { width: 10px; height: 10px; border-radius: 50%; background: #4b5265; }
+        .terminal-dot:nth-child(1) { background: #ff6b6b; }
+        .terminal-dot:nth-child(2) { background: #f7c94b; }
+        .terminal-dot:nth-child(3) { background: #43d58b; }
+        .terminal-title { margin-left: 8px; color: #8f98ad; font: 0.78rem ui-monospace, monospace; }
+
+        .terminal-body {
+            padding: 22px;
+            color: var(--code-text);
+            font: 0.84rem/1.8 ui-monospace, "Cascadia Code", Consolas, monospace;
+        }
+
+        .code-line { display: block; white-space: pre; }
+        .prompt { color: #6ee7b7; }
+        .command { color: #a5b4fc; }
+        .comment { color: #737d96; }
+        .success { color: #6ee7b7; }
+
+        .tools-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .tools-table th,
+        .tools-table td {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+        }
+
+        .tools-table th {
+            color: var(--muted);
+            background: var(--surface-muted);
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .tools-table td:first-child {
+            color: var(--primary);
+            font-weight: 800;
+            font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+        }
+
+        .tools-table td:last-child { color: var(--muted); }
+        .tools-table tr:last-child td { border-bottom: 0; }
+
+        .command-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+
+        .code-card { padding: 0; }
+
+        .code-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 17px 18px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .code-card-header h3 { font-size: 0.95rem; }
+
+        .copy-button {
+            padding: 5px 9px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            color: var(--muted);
+            background: var(--surface);
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .copy-button:hover { color: var(--primary); border-color: #c9c5ff; }
+
+        .code-card pre {
+            margin: 0;
+            padding: 18px;
+            overflow-x: auto;
+            color: var(--code-text);
+            background: var(--code);
+            font: 0.83rem/1.75 ui-monospace, "Cascadia Code", Consolas, monospace;
+        }
+
+        .security-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        .security-item { padding: 19px 20px; }
+        .security-item strong { display: block; margin-bottom: 4px; }
+        .security-item span { color: var(--muted); font-size: 0.86rem; }
+        .security-item::before {
+            content: "✓";
+            width: 23px;
+            height: 23px;
+            display: inline-grid;
+            place-items: center;
+            margin-right: 9px;
+            border-radius: 50%;
+            color: var(--success);
+            background: #e5f8f0;
+            font-size: 0.72rem;
+            font-weight: 900;
+        }
+
+        details.project-tree { overflow: hidden; }
+        details summary {
+            padding: 21px 22px;
+            cursor: pointer;
+            font-weight: 800;
+            list-style: none;
+        }
+
+        details summary::-webkit-details-marker { display: none; }
+        details summary::after {
+            content: "+";
+            float: right;
+            color: var(--primary);
+            font-size: 1.2rem;
+        }
+        details[open] summary::after { content: "−"; }
+        .tree-body { padding: 0 22px 22px; color: var(--muted); font-size: 0.9rem; }
+
+        .footer {
+            padding: 36px 0;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            text-align: center;
+            font-size: 0.86rem;
+        }
+
+        .footer a { color: var(--primary); font-weight: 750; }
+
+        [data-theme="dark"] {
+            --bg: #11131d;
+            --bg-soft: #171a27;
+            --surface: #1a1e2c;
+            --surface-muted: #202434;
+            --text: #edf0f8;
+            --muted: #a3abc0;
+            --line: #2c3143;
+            --primary: #8a82ff;
+            --primary-2: #ad75ff;
+            --primary-soft: #292747;
+            --success: #35d491;
+            --warning: #f59e0b;
+            --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
+            --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .topbar { background: rgba(17, 19, 29, 0.82); }
+        [data-theme="dark"] .stat,
+        [data-theme="dark"] .architecture-item,
+        [data-theme="dark"] .card { background: rgba(26, 30, 44, 0.86); }
+        [data-theme="dark"] .button-secondary { background: var(--surface); }
+        [data-theme="dark"] .code-card pre { background: #0d1019; }
+        [data-theme="dark"] .section { scroll-margin-top: 90px; }
+
+        @media (max-width: 860px) {
+            .nav-links a:not(.button) { display: none; }
+            .hero { padding-top: 70px; }
+            .grid-3,
+            .architecture-wrap,
+            .command-grid { grid-template-columns: 1fr; }
+            .hero-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 600px) {
+            .shell { width: min(calc(100% - 28px), var(--max)); }
+            .hero { padding: 58px 0 62px; }
+            .hero h1 { font-size: clamp(2.8rem, 16vw, 4.4rem); }
+            .hero-stats,
+            .security-grid { grid-template-columns: 1fr; }
+            .section { padding: 64px 0; }
+            .section-heading { display: block; }
+            .section-heading .button { margin-top: 18px; }
+            .stat { padding: 17px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <nav class="shell nav" aria-label="Main navigation">
+            <a class="brand" href="#top" aria-label="HIAI home">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3l7 4v10l-7 4-7-4V7l7-4z"/>
+                        <path d="M12 8v8M8.5 10v4M15.5 10v4"/>
+                    </svg>
+                </span>
+                <span>HIAI</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#tools">Tools</a>
+                <a href="#commands">Commands</a>
+                <a href="#security">Security</a>
+                <a class="button button-primary" href="https://github.com/toewaioo/hiai" target="_blank" rel="noreferrer">GitHub ↗</a>
+                <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">
+                    <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2z"/>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <main id="top">
+        <section class="shell hero">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> Local-first AI coding assistant</div>
+            <h1>Code with AI.<br><span class="gradient-text">Keep control.</span></h1>
+            <p class="hero-copy">HIAI is a privacy-focused terminal coding agent that understands, creates, and modifies projects through natural language — without sending your code to another server.</p>
+            <div class="hero-actions">
+                <a class="button button-primary" href="https://github.com/toewaioo/hiai" target="_blank" rel="noreferrer">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v13m0 0 5-5m-5 5-5-5M5 21h14"/></svg>
+                    Get started
+                </a>
+                <a class="button button-secondary" href="#architecture">Explore architecture</a>
+            </div>
+            <div class="hero-stats" aria-label="Project summary">
+                <div class="stat"><strong>0.1.0</strong><span>Current project version</span></div>
+                <div class="stat"><strong>MIT</strong><span>Open-source license</span></div>
+                <div class="stat"><strong>Python 3.10+</strong><span>Minimum supported version</span></div>
+                <div class="stat"><strong>0</strong><span>Required runtime dependencies</span></div>
+            </div>
+        </section>
+
+        <section class="section shell" id="features">
+            <div class="section-heading">
+                <div>
+                    <p class="section-kicker">Why HIAI</p>
+                    <h2>Built for focused, safe development.</h2>
+                </div>
+                <a class="button button-secondary" href="#security">Security model</a>
+            </div>
+            <div class="grid-3">
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h8M12 8v8"/></svg></div>
+                    <h3>Local-first</h3><p>Your code and project context stay on your machine. HIAI never requires a cloud-hosted project workspace.</p>
+                </article>
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v18M5 8l7-5 7 5M5 8l3 3M19 8l-3 3M5 16l3-3M19 16l-3-3"/></svg></div>
+                    <h3>OpenRouter models</h3><p>Use free or paid language models through OpenRouter while keeping model selection flexible and configurable.</p>
+                </article>
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m8 8-5 4 5 4M16 8l5 4-5 4M13 5l-2 14"/></svg></div>
+                    <h3>Natural-language control</h3><p>Ask for changes, explanations, searches, or test runs in plain language instead of memorizing a complex interface.</p>
+                </article>
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 4.5 6v5c0 4.8 3.2 8.4 7.5 10 4.3-1.6 7.5-5.2 7.5-10V6L12 3z"/><path d="m9 12 2 2 4-5"/></svg></div>
+                    <h3>Approval-based actions</h3><p>File writes and development commands require confirmation by default, with dangerous operations blocked outright.</p>
+                </article>
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg></div>
+                    <h3>Web research</h3><p>Search documentation and current technical references with the optional Tavily search provider.</p>
+                </article>
+                <article class="card card-pad feature-card">
+                    <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 4h12v16H6zM4 7l8-3 8 3M4 17l8 3 8-3"/></svg></div>
+                    <h3>Standard library only</h3><p>The runtime depends solely on Python's standard library, making installation and maintenance straightforward.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section shell" id="architecture">
+            <div class="architecture-wrap">
+                <div class="architecture-copy">
+                    <p class="section-kicker">Architecture</p>
+                    <h2>One CLI. A modular Python core.</h2>
+                    <p class="section-intro">HIAI combines the agent loop, OpenRouter client, search integration, permissions, and file tools in a compact Python package.</p>
+                    <div class="architecture-list">
+                        <div class="architecture-item"><span>CLI</span><span>Interactive chat, one-shot prompts, and project selection</span></div>
+                        <div class="architecture-item"><span>Agent</span><span>Turn-based tool calling and execution flow</span></div>
+                        <div class="architecture-item"><span>Tools</span><span>Filesystem, commands, schemas, and dispatch</span></div>
+                        <div class="architecture-item"><span>Search</span><span>Provider interface and Tavily implementation</span></div>
+                    </div>
+                </div>
+                <div class="terminal" aria-label="HIAI architecture diagram">
+                    <div class="terminal-bar"><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-title">hiai — package map</span></div>
+                    <div class="terminal-body">
+                        <span class="code-line"><span class="prompt">hiai/</span></span>
+                        <span class="code-line">├── <span class="command">cli.py</span>              <span class="comment"># Entry point</span></span>
+                        <span class="code-line">├── <span class="command">agent.py</span>            <span class="comment"># Agent loop</span></span>
+                        <span class="code-line">├── <span class="command">client.py</span>           <span class="comment"># OpenRouter HTTP client</span></span>
+                        <span class="code-line">├── <span class="command">config.py</span>           <span class="comment"># Configuration</span></span>
+                        <span class="code-line">├── <span class="command">permissions.py</span>      <span class="comment"># Safety checks</span></span>
+                        <span class="code-line">├── <span class="command">terminal.py</span>         <span class="comment"># Interactive UI</span></span>
+                        <span class="code-line">├── <span class="command">tools/</span></span>
+                        <span class="code-line">│   ├── <span class="command">filesystem.py</span></span>
+                        <span class="code-line">│   ├── <span class="command">commands.py</span></span>
+                        <span class="code-line">│   └── <span class="command">executor.py</span></span>
+                        <span class="code-line">└── <span class="success">search/</span>             <span class="comment"># Provider abstraction</span></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section shell" id="tools">
+            <div class="section-heading">
+                <div>
+                    <p class="section-kicker">Capabilities</p>
+                    <h2>Six tools for complete project work.</h2>
+                    <p class="section-intro">The agent receives a small, secure toolset designed around inspection, editing, execution, and research.</p>
+                </div>
+            </div>
+            <div class="card">
+                <table class="tools-table">
+                    <thead><tr><th>Tool</th><th>Purpose</th><th>Scope</th></tr></thead>
+                    <tbody>
+                        <tr><td>read_file</td><td>Read a UTF-8 text file</td><td>Project root only</td></tr>
+                        <tr><td>write_file</td><td>Create or replace text files</td><td>Confirmation by default</td></tr>
+                        <tr><td>list_files</td><td>List files and directories</td><td>Project root only</td></tr>
+                        <tr><td>search_files</td><td>Search text inside project files</td><td>Local search</td></tr>
+                        <tr><td>run_command</td><td>Execute approved development commands</td><td>Root-restricted</td></tr>
+                        <tr><td>web_search</td><td>Find current documentation and references</td><td>Configured provider</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section shell" id="commands">
+            <div class="section-heading">
+                <div>
+                    <p class="section-kicker">Quick start</p>
+                    <h2>Run HIAI in minutes.</h2>
+                    <p class="section-intro">Install from source, configure a model, and start a project conversation.</p>
+                </div>
+            </div>
+            <div class="command-grid">
+                <article class="card code-card">
+                    <div class="code-card-header"><h3>Install from source</h3><button class="copy-button" type="button" data-copy="git clone https://github.com/toewaioo/hiai.git&#10;cd hiai&#10;python -m venv .venv&#10;source .venv/bin/activate&#10;pip install -e .">Copy</button></div>
+                    <pre>git clone https://github.com/toewaioo/hiai.git
+cd hiai
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .</pre>
+                </article>
+                <article class="card code-card">
+                    <div class="code-card-header"><h3>Start an agent session</h3><button class="copy-button" type="button" data-copy="hiai&#10;hiai --project ./my-project "Create the requested changes"">Copy</button></div>
+                    <pre>hiai
+hiai --project ./my-project "Create the requested changes"</pre>
+                </article>
+                <article class="card code-card">
+                    <div class="code-card-header"><h3>Configure a model</h3><button class="copy-button" type="button" data-copy="hiai config set-key&#10;hiai config set-model openrouter/free">Copy</button></div>
+                    <pre>hiai config set-key
+hiai config set-model openrouter/free</pre>
+                </article>
+                <article class="card code-card">
+                    <div class="code-card-header"><h3>Test the project</h3><button class="copy-button" type="button" data-copy="make test&#10;make lint&#10;make clean">Copy</button></div>
+                    <pre>make test
+make lint
+make clean</pre>
+                </article>
+            </div>
+        </section>
+
+        <section class="section shell" id="security">
+            <div class="section-heading">
+                <div>
+                    <p class="section-kicker">Safety</p>
+                    <h2>Designed to protect your workspace.</h2>
+                    <p class="section-intro">Security controls are built into the CLI workflow rather than left to user habit.</p>
+                </div>
+            </div>
+            <div class="security-grid">
+                <article class="card security-item"><strong>Sandboxed file operations</strong><span>File access is restricted to the active project root.</span></article>
+                <article class="card security-item"><strong>Path traversal blocked</strong><span>Attempts to escape the workspace are rejected.</span></article>
+                <article class="card security-item"><strong>Commands need approval</strong><span>Development commands run only after user confirmation.</span></article>
+                <article class="card security-item"><strong>Writes are confirmable</strong><span>File creation and replacement are safe by default.</span></article>
+                <article class="card security-item"><strong>Dangerous actions blocked</strong><span>System-level destructive commands are always rejected.</span></article>
+                <article class="card security-item"><strong>Secrets stay protected</strong><span>API keys are not printed or sent to the AI model.</span></article>
+            </div>
+        </section>
+
+        <section class="section shell">
+            <div class="section-heading">
+                <div>
+                    <p class="section-kicker">Source layout</p>
+                    <h2>A compact, readable codebase.</h2>
+                </div>
+            </div>
+            <details class="card project-tree" open>
+                <summary>Inspect the repository structure</summary>
+                <div class="tree-body">
+                    hiai/
+                    ├── src/hiai/
+                    │   ├── cli.py · agent.py · client.py · config.py
+                    │   ├── permissions.py · terminal.py · markdown.py
+                    │   ├── models.py · prompts.py · constants.py
+                    │   ├── exceptions.py · __init__.py · __main__.py
+                    │   ├── tools/
+                    │   └── search/
+                    ├── tests/
+                    ├── pyproject.toml
+                    ├── Makefile
+                    ├── README.md
+                    ├── LICENSE
+                    └── .env.example
+                </div>
+            </details>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="shell">
+            <strong>HIAI</strong> · Local AI Terminal Coding Agent · Version 0.1.0 · <a href="https://github.com/toewaioo/hiai" target="_blank" rel="noreferrer">GitHub</a> · MIT License
+        </div>
+    </footer>
+
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const sunIcon = '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>';
+        const moonIcon = '<path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2z"/>';
+
+        function setTheme(theme) {
+            document.documentElement.dataset.theme = theme;
+            themeIcon.innerHTML = theme === 'dark' ? sunIcon : moonIcon;
+            themeToggle.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+        }
+
+        const savedTheme = localStorage.getItem('hiai-theme');
+        setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+        themeToggle.addEventListener('click', () => {
+            const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+            setTheme(nextTheme);
+            localStorage.setItem('hiai-theme', nextTheme);
+        });
+
+        document.querySelectorAll('.copy-button').forEach(button => {
+            button.addEventListener('click', async () => {
+                const text = button.dataset.copy;
+                try {
+                    await navigator.clipboard.writeText(text);
+                } catch {
+                    const area = document.createElement('textarea');
+                    area.value = text;
+                    area.style.position = 'fixed';
+                    area.style.opacity = '0';
+                    document.body.appendChild(area);
+                    area.select();
+                    document.execCommand('copy');
+                    area.remove();
+                }
+                const original = button.textContent;
+                button.textContent = 'Copied';
+                setTimeout(() => { button.textContent = original; }, 1400);
+            });
+        });
+    </script>
+</body>
+</html>
