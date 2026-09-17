@@ -58,6 +58,29 @@ def thinking() -> None:
     print(_c("dim", "HIAI is thinking..."))
 
 
+def stream_token(text: str) -> None:
+    """Write a streaming token to stdout without a trailing newline.
+
+    No-op when stdout is not a TTY (e.g. piped output) to avoid buffering
+    partial writes that would never be displayed.
+    """
+    if not USE_COLOR or not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+        return
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
+def print_stats(tokens_in: int, tokens_out: int, elapsed: float) -> None:
+    """Print a compact per-turn stats line (tokens and timing)."""
+    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+        return
+    stats = f"  {_format_elapsed(elapsed)} · {tokens_in} in / {tokens_out} out"
+    if tokens_in or tokens_out:
+        total = tokens_in + tokens_out
+        stats += f" · {total} total"
+    print(_c("dim", stats))
+
+
 def tool_start(tool_name: str) -> None:
     """Show tool execution start."""
     print(_c("cyan", f"⚙ Tool: {tool_name}"))
@@ -128,10 +151,11 @@ def prompt_sensitive_read(path: str) -> bool:
         return False
 
 
-def prompt_api_key() -> str | None:
+def prompt_api_key(provider: str = "openrouter") -> str | None:
     """Prompt user to enter an API key."""
+    provider_name = "Groq" if provider == "groq" else "OpenRouter"
     try:
-        print(_c("yellow", "Enter your OpenRouter API key:"))
+        print(_c("yellow", f"Enter your {provider_name} API key:"))
         key = input(_c("bold", "API Key: ")).strip()
         return key if key else None
     except (EOFError, KeyboardInterrupt):

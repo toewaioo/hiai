@@ -96,7 +96,6 @@ LANG_COLORS = {
     "ini": "white",
     "env": "white",
     "gitignore": "white",
-    "sh": "cyan",
 }
 
 

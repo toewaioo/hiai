@@ -31,5 +31,7 @@ def check_path_safety(project_root: Path, target: Path) -> None:
     project_resolved = project_root.resolve()
     target_resolved = target.resolve()
 
-    if not str(target_resolved).startswith(str(project_resolved)):
+    # Use is_relative_to instead of str().startswith() to avoid sibling-dir
+    # bypass (e.g. project "/home/user/proj" matching "/home/user/project-evil").
+    if not target_resolved.is_relative_to(project_resolved):
         raise ValueError(f"Path escapes project root: {target}")

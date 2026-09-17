@@ -108,11 +108,13 @@ def is_dangerous_command(command: str) -> bool:
 def _get_command_base(command: str) -> str:
     """Extract the base command name from a command string."""
     cmd = command.strip()
-    # Skip env vars like FOO=bar cmd
-    while cmd and "=" in cmd.split()[0] if cmd.split() else False:
+    # Skip leading env-var assignments like FOO=bar BAZ=qux cmd
+    while True:
         parts = cmd.split(None, 1)
+        if not parts or "=" not in parts[0]:
+            break
         if len(parts) < 2:
-            return cmd
+            return ""
         cmd = parts[1]
     # Skip sudo
     if cmd.startswith("sudo "):
@@ -219,15 +221,23 @@ def run_command(
 def _validate_command_paths(command: str, project_root: Path) -> bool:
     """Validate that command doesn't try to escape project root."""
     cmd = command.strip()
+    project_resolved = project_root.resolve()
 
     # Check for cd to parent directories
     cd_match = re.search(r"\bcd\s+([^\s;|&]+)", cmd)
     if cd_match:
         target = cd_match.group(1)
-        if target.startswith("/") and not str(project_root) in target:
+        # Reject any parent traversal outright
+        if ".." in target.split("/"):
             return False
-        if ".." in target:
-            return False
+        # For absolute cd targets, ensure they stay inside the project root
+        if target.startswith("/"):
+            try:
+                resolved = Path(target).resolve()
+                if not resolved.is_relative_to(project_resolved):
+                    return False
+            except (OSError, ValueError):
+                return False
 
     return True
 
@@ -295,10 +305,10 @@ def _execute_command(command: str, project_root: Path, timeout: int) -> ToolResu
 
 
 def _get_safe_env() -> dict[str, str]:
-    """Get a safe environment for command execution."""
-    env = os.environ.copy()
-    # Ensure we don't leak sensitive vars
-    for key in list(env.keys()):
-        if "KEY" in key.upper() or "SECRET" in key.upper() or "TOKEN" in key.upper():
-            pass  # Keep them for the subprocess but don't expose to AI
-    return env
+    """Get a safe environment for command execution.
+
+    Returns a copy of the current environment. Sensitive variables (KEY/SECRET/TOKEN)
+    are kept so the subprocess can function, but they are never surfaced to the AI
+    model — only command output is returned, and output is truncated.
+    """
+    return os.environ.copy()

@@ -7,6 +7,13 @@ from enum import Enum
 from typing import Any
 
 
+class Provider(Enum):
+    """Supported AI providers."""
+
+    OPENROUTER = "openrouter"
+    GROQ = "groq"
+
+
 class AgentState(Enum):
     """Agent execution states."""
 
@@ -57,6 +64,7 @@ class AgentState(Enum):
 class AppConfig:
     """Application configuration."""
 
+    provider: str = "openrouter"
     model: str = "openrouter/free"
     base_url: str = "https://openrouter.ai/api/v1"
     api_key: str = ""
@@ -64,6 +72,7 @@ class AppConfig:
     max_iterations: int = 20
     max_read_bytes: int = 1_000_000
     max_write_bytes: int = 2_000_000
+    rate_limit: int = 20  # max API requests per minute
     theme: str = "auto"
     search_provider: str = "tavily"
     search_api_key: str = ""

@@ -63,6 +63,15 @@ resolve_source() {
 create_venv() {
     if [ -d "$VENV_DIR" ]; then
         info "Virtual environment exists, reusing..."
+        # Ensure pip is available
+        if [ ! -f "$VENV_DIR/bin/pip" ]; then
+            step "Repairing venv (missing pip)..."
+            "$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>/dev/null || {
+                warn "Failed to repair venv, recreating..."
+                rm -rf "$VENV_DIR"
+                "$PYTHON" -m venv "$VENV_DIR"
+            }
+        fi
     else
         step "Creating virtual environment..."
         "$PYTHON" -m venv "$VENV_DIR"
@@ -72,8 +81,8 @@ create_venv() {
 
 install_package() {
     step "Installing HIAI package..."
-    "$VENV_DIR/bin/pip" install --upgrade pip -q 2>/dev/null
-    "$VENV_DIR/bin/pip" install -e "$REPO_DIR" -q 2>/dev/null
+    "$VENV_DIR/bin/python3" -m pip install --upgrade pip -q
+    "$VENV_DIR/bin/python3" -m pip install -e "$REPO_DIR" -q
     info "Package installed"
 }
 

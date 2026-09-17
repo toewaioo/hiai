@@ -49,7 +49,7 @@ class TestAgentSimpleResponse(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
         self.config = AppConfig(api_key="test-key", model="test-model")
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_simple_text_response(self, mock_chat):
         mock_chat.return_value = make_chat_response(content="Hello! How can I help?")
 
@@ -57,7 +57,7 @@ class TestAgentSimpleResponse(unittest.TestCase):
         response = agent.chat("Hi")
         self.assertEqual(response, "Hello! How can I help?")
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_conversation_history_grows(self, mock_chat):
         mock_chat.return_value = make_chat_response(content="OK")
 
@@ -73,7 +73,7 @@ class TestAgentToolCalls(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
         self.config = AppConfig(api_key="test-key", model="test-model")
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_tool_call_and_result(self, mock_chat):
         (self.tmpdir / "test.py").write_text("print('hello')")
 
@@ -89,7 +89,7 @@ class TestAgentToolCalls(unittest.TestCase):
         response = agent.chat("Read test.py")
         self.assertEqual(response, "The file contains a hello print.")
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_multiple_tool_calls(self, mock_chat):
         (self.tmpdir / "a.py").write_text("a")
         (self.tmpdir / "b.py").write_text("b")
@@ -117,7 +117,7 @@ class TestAgentMaxIterations(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
         self.config = AppConfig(api_key="test-key", max_iterations=2)
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_max_iterations_reached(self, mock_chat):
         tool_response = make_chat_response(
             content="",
@@ -137,7 +137,7 @@ class TestAgentClearHistory(unittest.TestCase):
         self.tmpdir = Path(tempfile.mkdtemp())
         self.config = AppConfig(api_key="test-key")
 
-    @patch("hiai.client.OpenRouterClient.chat_completion")
+    @patch("hiai.client.AIClient.chat_completion")
     def test_clear_keeps_system_prompt(self, mock_chat):
         mock_chat.return_value = make_chat_response(content="OK")
 
@@ -147,6 +147,56 @@ class TestAgentClearHistory(unittest.TestCase):
 
         self.assertEqual(len(agent.messages), 1)
         self.assertEqual(agent.messages[0]["role"], "system")
+
+
+class TestAgentIterationReset(unittest.TestCase):
+    """Test that the iteration counter resets between chat turns (bug A1)."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.config = AppConfig(api_key="test-key", max_iterations=3)
+
+    @patch("hiai.client.AIClient.chat_completion")
+    def test_iteration_resets_between_chats(self, mock_chat):
+        # Each turn returns immediately (no tool calls) using exactly 1 iteration.
+        mock_chat.return_value = make_chat_response(content="ok")
+
+        agent = Agent(self.config, self.tmpdir)
+        # Without the reset, the counter would accumulate and a 4th turn would
+        # exceed max_iterations=3 and raise MaxIterationsError.
+        agent.chat("turn 1")
+        agent.chat("turn 2")
+        agent.chat("turn 3")
+        agent.chat("turn 4")  # would raise if counter leaked
+        self.assertEqual(agent._iteration, 1)
+
+
+class TestAgentRetry(unittest.TestCase):
+    """Test retry_last_turn (B5)."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.config = AppConfig(api_key="test-key")
+
+    @patch("hiai.client.AIClient.chat_completion")
+    def test_retry_pops_last_turn(self, mock_chat):
+        mock_chat.return_value = make_chat_response(content="first answer")
+        agent = Agent(self.config, self.tmpdir)
+        agent.chat("hello")
+        self.assertEqual(len(agent.messages), 3)  # system + user + assistant
+
+        mock_chat.return_value = make_chat_response(content="second answer")
+        result = agent.retry_last_turn()
+        self.assertEqual(result, "second answer")
+        # The old assistant "first answer" must have been dropped; only one assistant remains.
+        roles = [m["role"] for m in agent.messages]
+        self.assertEqual(roles.count("user"), 1)
+        self.assertEqual(roles.count("assistant"), 1)
+        self.assertEqual(agent.messages[-1]["content"], "second answer")
+
+    def test_retry_with_no_prior_turn_returns_none(self):
+        agent = Agent(self.config, self.tmpdir)
+        self.assertIsNone(agent.retry_last_turn())
 
 
 class TestAgentGetStatus(unittest.TestCase):

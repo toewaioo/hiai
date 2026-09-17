@@ -16,6 +16,8 @@ from hiai.config import (
     set_api_key,
     set_base_url,
     set_model,
+    set_provider,
+    set_rate_limit,
     show_config,
 )
 from hiai.exceptions import APIKeyError, ConfigError
@@ -159,6 +161,159 @@ class TestEnvironmentOverrides(unittest.TestCase):
         with patch.dict(os.environ, {"HIAI_MODEL": "env-model"}):
             config = load_config()
             self.assertEqual(config.model, "env-model")
+
+
+class TestProviderSwitching(unittest.TestCase):
+    """Test provider switching between OpenRouter and Groq."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.config_path = Path(self.tmpdir) / "config.json"
+
+    @patch("hiai.config.get_config_path")
+    def test_set_provider_groq(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_provider("groq")
+        loaded = load_config()
+        self.assertEqual(loaded.provider, "groq")
+        self.assertEqual(loaded.base_url, "https://api.groq.com/openai/v1")
+        self.assertEqual(loaded.model, "llama-3.3-70b-versatile")
+
+    @patch("hiai.config.get_config_path")
+    def test_set_provider_openrouter(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_provider("groq")
+        set_provider("openrouter")
+        loaded = load_config()
+        self.assertEqual(loaded.provider, "openrouter")
+        self.assertEqual(loaded.base_url, "https://openrouter.ai/api/v1")
+        self.assertEqual(loaded.model, "openrouter/free")
+
+    @patch("hiai.config.get_config_path")
+    def test_set_provider_invalid_raises(self, mock_path):
+        mock_path.return_value = self.config_path
+        with self.assertRaises(ConfigError):
+            set_provider("invalid")
+
+    @patch("hiai.config.get_config_path")
+    def test_set_provider_empty_raises(self, mock_path):
+        mock_path.return_value = self.config_path
+        with self.assertRaises(ConfigError):
+            set_provider("")
+
+    @patch("hiai.config.get_config_path")
+    def test_set_provider_strips_whitespace(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_provider("  groq  ")
+        loaded = load_config()
+        self.assertEqual(loaded.provider, "groq")
+
+
+class TestGroqEnvironmentOverrides(unittest.TestCase):
+    """Test Groq-specific environment variable overrides."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    @patch("hiai.config.get_config_path")
+    def test_groq_api_key_overrides_when_provider_groq(self, mock_path):
+        mock_path.return_value = Path(self.tmpdir) / "nonexistent.json"
+        with patch.dict(os.environ, {
+            "OPENROUTER_API_KEY": "or-key",
+            "GROQ_API_KEY": "gsk-test",
+            "HIAI_PROVIDER": "groq",
+        }):
+            config = load_config()
+            self.assertEqual(config.provider, "groq")
+            self.assertEqual(config.api_key, "gsk-test")
+
+    @patch("hiai.config.get_config_path")
+    def test_groq_api_key_ignored_when_provider_openrouter(self, mock_path):
+        mock_path.return_value = Path(self.tmpdir) / "nonexistent.json"
+        with patch.dict(os.environ, {
+            "OPENROUTER_API_KEY": "or-key",
+            "GROQ_API_KEY": "gsk-test",
+        }):
+            config = load_config()
+            self.assertEqual(config.provider, "openrouter")
+            self.assertEqual(config.api_key, "or-key")
+
+    @patch("hiai.config.get_config_path")
+    def test_hiai_provider_env_sets_provider(self, mock_path):
+        mock_path.return_value = Path(self.tmpdir) / "nonexistent.json"
+        with patch.dict(os.environ, {"HIAI_PROVIDER": "groq"}):
+            config = load_config()
+            self.assertEqual(config.provider, "groq")
+
+
+class TestRequireAPIKeyGroq(unittest.TestCase):
+    """Test API key requirement for Groq provider."""
+
+    def test_require_api_key_groq_when_set(self):
+        config = AppConfig(provider="groq", api_key="gsk-test")
+        result = require_api_key(config)
+        self.assertEqual(result, "gsk-test")
+
+    def test_require_api_key_groq_when_missing(self):
+        config = AppConfig(provider="groq", api_key="")
+        with self.assertRaises(APIKeyError) as ctx:
+            require_api_key(config)
+        self.assertIn("GROQ_API_KEY", str(ctx.exception))
+
+    def test_require_api_key_openrouter_when_missing(self):
+        config = AppConfig(provider="openrouter", api_key="")
+        with self.assertRaises(APIKeyError) as ctx:
+            require_api_key(config)
+        self.assertIn("OPENROUTER_API_KEY", str(ctx.exception))
+
+
+class TestRateLimitConfig(unittest.TestCase):
+    """Test rate limit configuration."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.config_path = Path(self.tmpdir) / "config.json"
+
+    @patch("hiai.config.get_config_path")
+    def test_default_rate_limit(self, mock_path):
+        mock_path.return_value = self.config_path
+        config = load_config()
+        self.assertEqual(config.rate_limit, 20)
+
+    @patch("hiai.config.get_config_path")
+    def test_set_rate_limit(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_rate_limit(10)
+        config = load_config()
+        self.assertEqual(config.rate_limit, 10)
+
+    @patch("hiai.config.get_config_path")
+    def test_set_rate_limit_min(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_rate_limit(0)
+        config = load_config()
+        self.assertEqual(config.rate_limit, 1)
+
+    @patch("hiai.config.get_config_path")
+    def test_set_rate_limit_max(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_rate_limit(200)
+        config = load_config()
+        self.assertEqual(config.rate_limit, 100)
+
+    @patch("hiai.config.get_config_path")
+    def test_rate_limit_persists(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_rate_limit(15)
+        loaded = load_config()
+        self.assertEqual(loaded.rate_limit, 15)
+
+    @patch("hiai.config.get_config_path")
+    def test_show_config_includes_rate_limit(self, mock_path):
+        mock_path.return_value = self.config_path
+        set_rate_limit(25)
+        displayed = show_config()
+        self.assertEqual(displayed["rate_limit"], "25/min")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ dev: ## Install in development mode
 	pip install -e ".[dev]"
 
 test: ## Run tests
-	python -m unittest discover -s tests -v
+	python3 -m unittest discover -s tests -v
 
 lint: ## Run linting
 	@command -v ruff >/dev/null 2>&1 && ruff check src/ tests/ || echo "Install ruff: pip install ruff"

@@ -35,6 +35,16 @@ class TestResolveSafePath(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve_safe_path(self.project, "src/../../etc/passwd")
 
+    def test_rejects_sibling_directory_with_shared_prefix(self):
+        # A sibling dir whose name starts with the project name must NOT be
+        # treated as inside the project. The old str().startswith() check
+        # incorrectly allowed this; is_relative_to() rejects it.
+        evil = self.tmpdir / "project-evil"
+        evil.mkdir()
+        (evil / "secret.txt").write_text("secret", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            resolve_safe_path(self.project, "../project-evil/secret.txt")
+
     def test_empty_path_returns_root(self):
         result = resolve_safe_path(self.project, "")
         self.assertEqual(result, self.project)
