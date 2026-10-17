@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from hiai.models import ToolResult
@@ -117,8 +115,7 @@ def _get_command_base(command: str) -> str:
             return ""
         cmd = parts[1]
     # Skip sudo
-    if cmd.startswith("sudo "):
-        cmd = cmd[5:]
+    cmd = cmd.removeprefix("sudo ")
     # Skip pipes, get first command
     cmd = cmd.split("|")[0].strip()
     # Skip redirections

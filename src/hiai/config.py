@@ -7,15 +7,6 @@ import os
 import sys
 from pathlib import Path
 
-from hiai.constants import (
-    DEFAULT_BASE_URL,
-    DEFAULT_MAX_ITERATIONS,
-    DEFAULT_MAX_READ_BYTES,
-    DEFAULT_MAX_WRITE_BYTES,
-    DEFAULT_MODEL,
-    DEFAULT_PROVIDER,
-    DEFAULT_TIMEOUT,
-)
 from hiai.exceptions import APIKeyError, ConfigError
 from hiai.models import AppConfig
 from hiai.utils.env import load_default_env

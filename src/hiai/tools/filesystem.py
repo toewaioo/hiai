@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from hiai.constants import IGNORED_DIRS, MAX_FILE_READ_SIZE, MAX_LIST_FILES, MAX_SEARCH_RESULTS
-from hiai.exceptions import FileReadError, FileWriteError, PathSecurityError
+from hiai.constants import (
+    MAX_FILE_READ_SIZE,
+    MAX_LIST_FILES,
+    MAX_SEARCH_RESULTS,
+)
+from hiai.exceptions import PathSecurityError
 from hiai.models import ToolResult
-from hiai.permissions import check_path_safety, is_sensitive
 from hiai.utils.paths import match_ignored, resolve_safe_path
 
 
@@ -160,8 +163,6 @@ class FileSystemTools:
             for dirpath, dirnames, filenames in os.walk(target):
                 dirnames[:] = [d for d in dirnames if not match_ignored(d)]
 
-                rel_dir = str(Path(dirpath).relative_to(self.project_root))
-
                 for d in sorted(dirnames):
                     full = os.path.join(dirpath, d)
                     rel = str(Path(full).relative_to(self.project_root))
@@ -252,9 +253,12 @@ class FileSystemTools:
 
                     if len(text) > 500_000:
                         continue
+                    # Cheap binary sniff: NUL bytes in the first chunk
+                    if "\x00" in text[:8192]:
+                        continue
 
                     for line_num, line in enumerate(text.splitlines(), 1):
-                        if query_lower in line.lower():
+                        if query_lower in line or query_lower in line.lower():
                             matches.append({
                                 "path": rel,
                                 "line": line_num,

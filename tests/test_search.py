@@ -1,12 +1,10 @@
 """Tests for web search tool."""
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from hiai.search.base import SearchProvider, SearchResponse, SearchResult
+from hiai.search.base import SearchResponse, SearchResult
 from hiai.search.provider import get_search_provider, web_search
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import atexit
+import json
 import sys
 from pathlib import Path
 
@@ -12,7 +14,6 @@ from hiai.config import (
     load_config,
     require_api_key,
     reset_config,
-    save_config,
     set_api_key,
     set_base_url,
     set_model,
@@ -22,7 +23,6 @@ from hiai.config import (
 )
 from hiai.exceptions import APIKeyError, ConfigError, HIAIError
 from hiai.markdown import print_markdown
-from hiai.models import AppConfig
 from hiai.terminal import (
     _c,
     error,
@@ -34,6 +34,17 @@ from hiai.terminal import (
     success,
     warning,
 )
+
+# Interactive slash commands (also used for tab completion)
+_SLASH_COMMANDS = (
+    "/help", "/clear", "/model", "/project", "/status", "/tools",
+    "/save", "/load", "/history", "/retry", "/search", "/run",
+    "/exit", "/quit",
+)
+
+# Keep a module-level reference: readline holds a weakref to the completer.
+_readline = None
+_COMPLETER = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -217,13 +228,56 @@ def cmd_models() -> None:
     print("    mixtral-8x7b-32768")
 
 
+def _setup_readline(project_dir: Path) -> None:
+    """Enable line editing, input history, and slash-command tab completion."""
+    global _readline, _COMPLETER
+    try:
+        import readline
+    except ImportError:
+        return  # e.g. minimal Python builds without GNU readline
+    _readline = readline
+
+    def completer(text: str, state: int) -> str | None:
+        if not text.startswith("/"):
+            return None
+        options = [cmd for cmd in _SLASH_COMMANDS if cmd.startswith(text)]
+        return options[state] if state < len(options) else None
+
+    _COMPLETER = completer  # keep alive (readline stores a weak reference)
+    readline.set_completer(completer)
+    readline.set_completer_delims(" \t\n")
+    readline.parse_and_bind("tab: complete")
+
+    history_path = project_dir / ".hiai" / "input_history"
+    try:
+        readline.read_history_file(str(history_path))
+    except OSError:
+        pass
+    readline.set_history_length(500)
+
+    def _save_history() -> None:
+        try:
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+            readline.write_history_file(str(history_path))
+        except OSError:
+            pass
+
+    atexit.register(_save_history)
+
+
+def _read_input() -> str:
+    """Read one line of user input with a styled prompt."""
+    return input(_c("bold", _c("cyan", "hiai❯ "))).strip()
+
+
 def run_interactive(agent: Agent, project_dir: Path, quiet: bool = False) -> None:
     """Run interactive chat mode."""
     print_banner(str(project_dir), agent.config.model)
+    _setup_readline(project_dir)
 
     while True:
         try:
-            user_input = input("\033[1m\033[36mhiai>\033[0m ").strip()
+            user_input = _read_input()
         except (EOFError, KeyboardInterrupt):
             print()
             info("Goodbye!")
@@ -329,27 +383,107 @@ def _handle_slash_command(user_input: str, agent: Agent, project_dir: Path, quie
             error(str(e))
         except Exception as e:
             error(f"Retry failed: {e}")
+    elif cmd == "/search":
+        if not arg:
+            warning("Usage: /search <query>")
+        else:
+            _run_search(agent, arg)
+    elif cmd == "/run":
+        if not arg:
+            warning("Usage: /run <command>")
+        else:
+            _run_command(agent, arg)
     else:
         warning(f"Unknown command: {cmd}. Type /help for available commands.")
     return True
 
 
+def _run_search(agent: Agent, query: str) -> None:
+    """Run a direct web search via the configured search provider."""
+    try:
+        result = agent.registry.execute("web_search", json.dumps({"query": query}))
+        data = json.loads(result)
+    except Exception as e:
+        error(f"Search failed: {e}")
+        return
+
+    status = data.get("status", "")
+    if status == "error":
+        error(data.get("message", "Search failed."))
+        return
+
+    content = data.get("content", "")
+    if content:
+        try:
+            payload = json.loads(content)
+            results = payload.get("results", [])
+        except json.JSONDecodeError:
+            results = []
+        if results:
+            print(_c("bold", f"Results for \"{query}\":"))
+            print()
+            for r in results:
+                title = r.get("title", "")
+                url = r.get("url", "")
+                snippet = (r.get("content", "") or r.get("snippet", "")).strip()
+                print(f"  {_c('cyan', title)}")
+                if url:
+                    print(f"  {_c('dim', url)}")
+                if snippet:
+                    print(f"  {snippet[:200]}")
+                print()
+            return
+    message = data.get("message", "")
+    info(message or "No results found.")
+
+
+def _run_command(agent: Agent, command: str) -> None:
+    """Execute a command through the permission system."""
+    try:
+        result = agent.registry.execute("run_command", json.dumps({"command": command}))
+        data = json.loads(result)
+    except Exception as e:
+        error(f"Command failed: {e}")
+        return
+
+    status = data.get("status", "")
+    if status == "error":
+        error(data.get("message", "Command failed."))
+        return
+    if status == "cancelled":
+        warning(data.get("message", "Command cancelled."))
+        return
+    if status == "timeout":
+        warning(data.get("message", "Command timed out."))
+        content = (data.get("content") or "").strip()
+        if content:
+            print(_c("dim", content))
+        return
+
+    content = (data.get("content") or "").strip()
+    if content:
+        print(_c("dim", content))
+    success(f"Command completed: {command}")
+
+
 def _show_help() -> None:
     """Show available commands."""
-    print("""
-  Commands:
-    /help            Show this help message
-    /clear           Clear conversation history
-    /model [name]    Show or set the current model
-    /project         Show project root
-    /status          Show session information
-    /tools           Show available AI tools
-    /save [path]     Save conversation history (default: .hiai/session.json)
-    /load [path]     Load conversation history
-    /history         List saved sessions
-    /retry           Re-run the last user turn
-    /exit            Exit HIAI (saves session for --resume)
-    /quit            Exit HIAI (saves session for --resume)
+    print(f"""
+  {_c('bold', 'Commands')} {_c('dim', '(tab completion available)')}
+    {_c('cyan', '/help')}            Show this help message
+    {_c('cyan', '/clear')}           Clear conversation history
+    {_c('cyan', '/model [name]')}    Show or set the current model
+    {_c('cyan', '/project')}         Show project root
+    {_c('cyan', '/status')}          Show session information
+    {_c('cyan', '/tools')}           Show available AI tools
+    {_c('cyan', '/search <query>')}  Search the web directly
+    {_c('cyan', '/run <command>')}   Run a command (with approval)
+    {_c('cyan', '/save [path]')}     Save conversation history (default: .hiai/session.json)
+    {_c('cyan', '/load [path]')}     Load conversation history
+    {_c('cyan', '/history')}         List saved sessions
+    {_c('cyan', '/retry')}           Re-run the last user turn
+    {_c('cyan', '/exit')}            Exit HIAI (saves session for --resume)
+    {_c('cyan', '/quit')}            Exit HIAI (saves session for --resume)
 """)
 
 

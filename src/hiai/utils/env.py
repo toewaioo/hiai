@@ -37,7 +37,7 @@ def load_dotenv(path: Path) -> bool:
         key = key.strip()
         # Strip surrounding quotes and inline comments after value
         value = value.strip()
-        if "#" in value and not (value.startswith('"') or value.startswith("'")):
+        if "#" in value and not value.startswith(('"', "'")):
             value = value.split("#", 1)[0].rstrip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]

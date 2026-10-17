@@ -96,9 +96,8 @@ class ToolRegistry:
         if content is None:
             return ToolResult(status="error", message="Missing required parameter: content")
 
-        from hiai.permissions import is_sensitive
-        from hiai.utils.paths import resolve_safe_path
         from hiai.terminal import prompt_write
+        from hiai.utils.paths import resolve_safe_path
 
         try:
             target = resolve_safe_path(self.project_root, path)

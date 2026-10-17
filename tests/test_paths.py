@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hiai.utils.paths import get_platform_config_dir, is_sensitive_file, resolve_safe_path
+from hiai.utils.paths import (
+    get_platform_config_dir,
+    is_sensitive_file,
+    resolve_safe_path,
+)
 
 
 class TestResolveSafePath(unittest.TestCase):

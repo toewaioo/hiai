@@ -9,7 +9,8 @@ import time
 import urllib.error
 import urllib.request
 from collections import deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from hiai.constants import USER_AGENT
 from hiai.exceptions import (
@@ -89,9 +90,7 @@ class AIClient:
         """Build the full URL, avoiding double /v1/v1."""
         base = self.base_url
         if base.endswith("/api/v1"):
-            if endpoint.startswith("/v1/"):
-                endpoint = endpoint[3:]
-            elif endpoint.startswith("/v1"):
+            if endpoint.startswith(("/v1/", "/v1")):
                 endpoint = endpoint[3:]
             return f"{base}/{endpoint.lstrip('/')}"
         else:

@@ -4,23 +4,27 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 from typing import TextIO
 
 from hiai.constants import ANSI_COLORS
+
+
+def _is_tty(stream: TextIO | None = None) -> bool:
+    """Check whether a stream is an interactive terminal."""
+    stream = stream or sys.stdout
+    return hasattr(stream, "isatty") and stream.isatty()
 
 
 def _supports_color() -> bool:
     """Check if the terminal supports color output."""
     if os.environ.get("NO_COLOR"):
         return False
-    if not hasattr(sys.stdout, "isatty"):
-        return False
-    if not sys.stdout.isatty():
+    if not _is_tty():
         return False
     term = os.environ.get("TERM", "")
-    if "dumb" in term:
-        return False
-    return True
+    return "dumb" not in term
 
 
 USE_COLOR = _supports_color()
@@ -31,6 +35,90 @@ def _c(code: str, text: str) -> str:
     if not USE_COLOR:
         return text
     return f"{ANSI_COLORS.get(code, '')}{text}{ANSI_COLORS['reset']}"
+
+
+class Spinner:
+    """Animated single-line status indicator with a live elapsed timer.
+
+    Rewrites one terminal line instead of printing a new line per status
+    update, keeping the transcript clean. No-op when stdout is not a TTY.
+    """
+
+    FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+
+    def __init__(self, enabled: bool | None = None) -> None:
+        self._enabled = _is_tty() if enabled is None else enabled
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._message = ""
+        self._started_at = 0.0
+        self._active = False
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    def start(self, message: str = "") -> None:
+        """Start (or update) the spinner with an initial message."""
+        if not self._enabled:
+            return
+        if self._active:
+            self.update(message)
+            return
+        self._message = message
+        self._started_at = time.monotonic()
+        self._active = True
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def update(self, message: str) -> None:
+        """Update the spinner message (no-op if not running)."""
+        if not self._active:
+            return
+        with self._lock:
+            self._message = message
+
+    def stop(self, final: str | None = None) -> None:
+        """Stop the spinner, clear its line, optionally print a final message."""
+        if not self._active:
+            return
+        self._active = False
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.25)
+            self._thread = None
+        self._clear_line()
+        if final:
+            print(final)
+
+    def _run(self) -> None:
+        idx = 0
+        while not self._stop_event.wait(0.09):
+            frame = self.FRAMES[idx % len(self.FRAMES)]
+            idx += 1
+            with self._lock:
+                message = self._message
+            elapsed = _format_elapsed(time.monotonic() - self._started_at)
+            line = f"{_c('cyan', frame)} {_c('dim', message)} {_c('dim', elapsed)}"
+            try:
+                sys.stdout.write("\r\033[K" + line)
+                sys.stdout.flush()
+            except OSError:
+                break
+
+    @staticmethod
+    def _clear_line() -> None:
+        try:
+            sys.stdout.write("\r\033[K")
+            sys.stdout.flush()
+        except OSError:
+            pass
 
 
 def info(message: str) -> None:
@@ -61,24 +149,24 @@ def thinking() -> None:
 def stream_token(text: str) -> None:
     """Write a streaming token to stdout without a trailing newline.
 
-    No-op when stdout is not a TTY (e.g. piped output) to avoid buffering
-    partial writes that would never be displayed.
+    Callers opt in via the agent's stream mode; tokens are written as they
+    arrive so piped output also receives the full response.
     """
-    if not USE_COLOR or not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
-        return
-    sys.stdout.write(text)
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+    except OSError:
+        pass
 
 
 def print_stats(tokens_in: int, tokens_out: int, elapsed: float) -> None:
     """Print a compact per-turn stats line (tokens and timing)."""
-    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+    if not _is_tty():
         return
-    stats = f"  {_format_elapsed(elapsed)} · {tokens_in} in / {tokens_out} out"
+    parts = [f"done in {_format_elapsed(elapsed)}"]
     if tokens_in or tokens_out:
-        total = tokens_in + tokens_out
-        stats += f" · {total} total"
-    print(_c("dim", stats))
+        parts.append(f"{tokens_in:,} in / {tokens_out:,} out tokens")
+    print(_c("dim", "  ✓ " + " · ".join(parts)))
 
 
 def tool_start(tool_name: str) -> None:
@@ -113,13 +201,13 @@ def prompt_command(command: str, project_root: str, timeout: int) -> bool:
 
 def tool_search_start(query: str) -> None:
     """Show search execution start."""
-    print(_c("cyan", f"⚙ Tool: web_search"))
+    print(_c("cyan", "⚙ Tool: web_search"))
     print(_c("dim", f"  🔎 Query: {query}"))
 
 
 def tool_command_start(command: str) -> None:
     """Show command execution start."""
-    print(_c("cyan", f"⚙ Tool: run_command"))
+    print(_c("cyan", "⚙ Tool: run_command"))
     print(_c("dim", f"  ⌘ Command: {command}"))
 
 
@@ -356,7 +444,6 @@ def _detail_run_command(data: dict) -> None:
     """Display run_command details."""
     command = data.get("command", "")
     content = data.get("content", "")
-    status = data.get("status", "")
 
     print(_c("dim", f"  ⌘ $ {command}"))
 

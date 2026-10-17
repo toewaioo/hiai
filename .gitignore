@@ -38,3 +38,4 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.hiai/input_history

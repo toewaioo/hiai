@@ -3,7 +3,6 @@
 import unittest
 
 from hiai.markdown import (
-    _colorize_code_line,
     _format_inline,
     _highlight_json,
     _highlight_python,

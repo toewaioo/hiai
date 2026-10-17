@@ -9,23 +9,19 @@ from typing import Any
 
 from hiai.client import AIClient
 from hiai.exceptions import (
-    AgentError,
-    MaxIterationsError,
     MalformedToolCallError,
+    MaxIterationsError,
     ToolError,
 )
 from hiai.models import AgentState, AppConfig
 from hiai.prompts import build_system_prompt
 from hiai.terminal import (
-    agent_alive,
+    Spinner,
     agent_dead,
     agent_error_recovery,
     agent_state_changed,
-    agent_status,
     error,
     stream_token,
-    success,
-    thinking,
     tool_complete,
     tool_detail,
     tool_error,
@@ -36,6 +32,16 @@ from hiai.tools.executor import ToolRegistry
 
 # Transient errors that can be retried
 _TRANSIENT_ERRORS = (ConnectionError, TimeoutError, OSError)
+
+# Tool name → agent state used while executing it
+_TOOL_STATES: dict[str, AgentState] = {
+    "read_file": AgentState.READING,
+    "write_file": AgentState.WRITING,
+    "list_files": AgentState.READING,
+    "search_files": AgentState.SEARCHING,
+    "run_command": AgentState.EXECUTING,
+    "web_search": AgentState.SEARCHING,
+}
 
 
 class Agent:
@@ -63,6 +69,9 @@ class Agent:
         self.messages: list[dict[str, Any]] = []
         self._init_messages()
 
+        # Live status spinner (TTY only; no-op when piped/quiet terminals)
+        self._spinner = Spinner()
+
         # State tracking
         self._state = AgentState.IDLE
         self._state_changed_at = time.time()
@@ -75,6 +84,7 @@ class Agent:
         self._last_tokens_in = 0
         self._last_tokens_out = 0
         self._last_turn_elapsed = 0.0
+        self._streamed_output = False
 
     @property
     def state(self) -> AgentState:
@@ -99,13 +109,26 @@ class Agent:
         return time.time() - self._start_time
 
     def _set_state(self, new_state: AgentState, detail: str = "") -> None:
-        """Transition to a new state and display the change."""
+        """Transition to a new state and surface it in the UI."""
         old_state = self._state
         self._state = new_state
         self._state_changed_at = time.time()
         self._last_heartbeat = time.time()
 
-        if old_state != new_state:
+        if old_state == new_state:
+            return
+
+        # After streaming, the CLI prints a newline itself — don't glue the
+        # idle transition onto the last streamed token.
+        if self._streamed_output and new_state == AgentState.IDLE:
+            return
+
+        if self._spinner.active:
+            # Live single-line status while the spinner is running
+            label = new_state.description
+            message = f"{new_state.icon} {label}" if not detail else f"{new_state.icon} {label} — {detail}"
+            self._spinner.update(message)
+        else:
             agent_state_changed(old_state.value, new_state.value, detail)
 
     def _init_messages(self) -> None:
@@ -213,6 +236,7 @@ class Agent:
         self._last_tokens_in = 0
         self._last_tokens_out = 0
         self._last_turn_elapsed = 0.0
+        self._streamed_output = False
 
         self.messages.append({
             "role": "user",
@@ -221,48 +245,54 @@ class Agent:
 
         tools = self.registry.get_definitions()
 
-        while self._iteration < self.config.max_iterations:
-            self._iteration += 1
-            self._set_state(AgentState.THINKING, f"iteration {self._iteration}")
-            agent_alive(self._iteration, self.config.max_iterations, self._state.value)
+        try:
+            while self._iteration < self.config.max_iterations:
+                self._iteration += 1
+                self._set_state(AgentState.THINKING, f"iteration {self._iteration}")
+                self._spinner.start(
+                    f"Thinking · iter {self._iteration}/{self.config.max_iterations}"
+                )
 
-            # Call API with retry on transient errors
-            response = self._call_api_with_retry(tools)
-            if response is None:
-                self._set_state(AgentState.DEAD, "API failure")
-                agent_dead("API failure after retries", self._iteration)
-                return "Error: API request failed. Check your API key (hiai config set-key) and model (hiai config set-model)."
+                # Call API with retry on transient errors
+                response = self._call_api_with_retry(tools)
+                self._spinner.stop()
+                if response is None:
+                    self._set_state(AgentState.DEAD, "API failure")
+                    agent_dead("API failure after retries", self._iteration)
+                    return "Error: API request failed. Check your API key (hiai config set-key) and model (hiai config set-model)."
 
-            # Track token usage if the provider reports it
-            usage = response.get("usage")
-            if isinstance(usage, dict):
-                self._last_tokens_in = int(usage.get("prompt_tokens", 0)) or self._last_tokens_in
-                self._last_tokens_out = int(usage.get("completion_tokens", 0)) or self._last_tokens_out
+                # Track token usage if the provider reports it
+                usage = response.get("usage")
+                if isinstance(usage, dict):
+                    self._last_tokens_in = int(usage.get("prompt_tokens", 0)) or self._last_tokens_in
+                    self._last_tokens_out = int(usage.get("completion_tokens", 0)) or self._last_tokens_out
 
-            choice = response.get("choices", [{}])[0]
-            message = choice.get("message", {})
+                choice = response.get("choices", [{}])[0]
+                message = choice.get("message", {})
 
-            content = message.get("content", "")
-            tool_calls = message.get("tool_calls")
+                content = message.get("content", "")
+                tool_calls = message.get("tool_calls")
 
-            if not tool_calls:
-                if content:
-                    self.messages.append({
-                        "role": "assistant",
-                        "content": content,
-                    })
-                self._set_state(AgentState.IDLE, "response ready")
-                self._last_turn_elapsed = time.time() - (self._start_time or time.time())
-                return content or ""
+                if not tool_calls:
+                    if content:
+                        self.messages.append({
+                            "role": "assistant",
+                            "content": content,
+                        })
+                    self._set_state(AgentState.IDLE, "response ready")
+                    self._last_turn_elapsed = time.time() - (self._start_time or time.time())
+                    return content or ""
 
-            self.messages.append({
-                "role": "assistant",
-                "content": content or "",
-                "tool_calls": tool_calls,
-            })
+                self.messages.append({
+                    "role": "assistant",
+                    "content": content or "",
+                    "tool_calls": tool_calls,
+                })
 
-            # Execute all tool calls
-            self._execute_tool_calls(tool_calls)
+                # Execute all tool calls
+                self._execute_tool_calls(tool_calls)
+        finally:
+            self._spinner.stop()
 
         self._set_state(AgentState.DEAD, "max iterations")
         agent_dead("max iterations exceeded", self._iteration)
@@ -273,9 +303,15 @@ class Agent:
     def _call_api_with_retry(self, tools: list[dict]) -> dict | None:
         """Call the API with retry logic for transient errors."""
         max_retries = 3
-        last_error = None
+        spinner_stopped = False
 
         def _on_delta(text: str) -> None:
+            nonlocal spinner_stopped
+            if not spinner_stopped:
+                # Clear the status line once real output starts streaming
+                self._spinner.stop()
+                spinner_stopped = True
+            self._streamed_output = True
             stream_token(text)
 
         for attempt in range(max_retries):
@@ -288,7 +324,6 @@ class Agent:
                     on_delta=_on_delta if self.stream else None,
                 )
             except _TRANSIENT_ERRORS as e:
-                last_error = e
                 self._error_count += 1
                 self._total_errors += 1
                 if attempt < max_retries - 1:
@@ -312,15 +347,7 @@ class Agent:
             tool_args_raw = func.get("arguments", "{}")
 
             # Map tool name to agent state
-            state_map = {
-                "read_file": AgentState.READING,
-                "write_file": AgentState.WRITING,
-                "list_files": AgentState.READING,
-                "search_files": AgentState.SEARCHING,
-                "run_command": AgentState.EXECUTING,
-                "web_search": AgentState.SEARCHING,
-            }
-            tool_state = state_map.get(tool_name, AgentState.EXECUTING)
+            tool_state = _TOOL_STATES.get(tool_name, AgentState.EXECUTING)
 
             # Extract detail from args
             detail = self._extract_tool_detail(tool_name, tool_args_raw)
@@ -379,9 +406,7 @@ class Agent:
         except (json.JSONDecodeError, TypeError):
             return ""
 
-        if tool_name == "read_file":
-            return args.get("path", "")
-        elif tool_name == "write_file":
+        if tool_name == "read_file" or tool_name == "write_file":
             return args.get("path", "")
         elif tool_name == "list_files":
             return args.get("path", ".")

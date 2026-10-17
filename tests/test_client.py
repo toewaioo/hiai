@@ -2,17 +2,12 @@
 
 import io
 import json
-import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from hiai.client import AIClient, OpenRouterClient, RateLimiter
 from hiai.exceptions import (
-    APIRequestError,
-    APIResponseError,
-    AuthenticationError,
     RateLimitError,
 )
 

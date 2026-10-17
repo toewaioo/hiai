@@ -1,6 +1,5 @@
 """Tests for configuration management."""
 
-import json
 import os
 import tempfile
 import unittest

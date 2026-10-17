@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hiai.constants import SENSITIVE_PATTERNS
 from hiai.utils.paths import is_sensitive_file
 
 
@@ -13,9 +12,7 @@ def needs_write_confirmation(path: Path, auto_approve: bool) -> bool:
 
     Returns True if the user must be asked before writing.
     """
-    if auto_approve:
-        return False
-    return True
+    return not auto_approve
 
 
 def is_sensitive(path: Path) -> bool:

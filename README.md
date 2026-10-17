@@ -256,6 +256,8 @@ hiai "Find how to fix this Python error"
 | `/run <command>` | Request command execution via the permission system |
 | `/exit`, `/quit` | Exit HIAI (session auto-saved for `--resume`) |
 
+The interactive prompt supports **tab completion** for slash commands, **arrow-key line editing**, and persistent **input history** (`.hiai/input_history`). While the agent works, a live animated status line shows the current state and elapsed time instead of flooding the transcript.
+
 ---
 
 ## 🧠 Available Models

@@ -104,236 +104,237 @@ def _colorize_inline_code(code: str) -> str:
     return _c("cyan", code)
 
 
+def _build_keyword_pattern(keywords: tuple[str, ...]) -> re.Pattern[str]:
+    """Build a single word-boundary alternation for a keyword list."""
+    escaped = sorted((re.escape(k) for k in keywords), key=len, reverse=True)
+    return re.compile(r"\b(" + "|".join(escaped) + r")\b")
+
+
+def _make_token_re(
+    *,
+    strings: str,
+    comments: str,
+    keywords: re.Pattern[str],
+    extra: str = "",
+) -> re.Pattern[str]:
+    """Build a single-pass tokenizer: strings/comments/numbers/funcs/keywords.
+
+    One combined alternation avoids re-scanning the line per token type and
+    prevents ANSI escapes from later passes corrupting earlier ones.
+    """
+    parts = [
+        f"(?P<str>{strings})",
+        f"(?P<comment>{comments})",
+    ]
+    if extra:
+        parts.append(f"(?P<extra>{extra})")
+    parts.extend(
+        [
+            r"(?P<func>\b\w+(?=\s*\())",
+            r"(?P<num>\b\d+\.?\d*\b)",
+            f"(?P<kw>{keywords.pattern})",
+        ]
+    )
+    return re.compile("|".join(parts))
+
+
+_TOKEN_COLORS = {
+    "str": "yellow",
+    "comment": "dim",
+    "extra": "magenta",
+    "func": "cyan",
+    "num": "magenta",
+    "kw": "green",
+}
+
+
+def _apply_token_re(line: str, token_re: re.Pattern[str]) -> str:
+    """Colorize a code line in one pass using a tokenizer regex."""
+
+    def repl(m: re.Match[str]) -> str:
+        color = _TOKEN_COLORS.get(m.lastgroup or "", "white")
+        if color == "dim":
+            return _dim(m.group(0))
+        return _c(color, m.group(0))
+
+    return token_re.sub(repl, line)
+
+
+# --- Precompiled tokenizers (compiled once at import time) -------------------
+
+_PY_KEYWORDS = _build_keyword_pattern(
+    (
+        "def", "class", "import", "from", "return", "if", "elif", "else",
+        "for", "while", "with", "as", "try", "except", "finally",
+        "raise", "yield", "lambda", "pass", "break", "continue",
+        "and", "or", "not", "in", "is", "True", "False", "None",
+        "self", "async", "await", "global", "nonlocal", "assert",
+    )
+)
+_PY_TOKEN_RE = _make_token_re(
+    strings=r"'''(?:[^'\\]|\\.)*'''|\"\"\"(?:[^\"\\]|\\.)*\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"",
+    comments=r"\#[^\n]*",
+    keywords=_PY_KEYWORDS,
+    extra=r"@\w+",
+)
+
+_JS_KEYWORDS = _build_keyword_pattern(
+    (
+        "const", "let", "var", "function", "return", "if", "else",
+        "for", "while", "do", "switch", "case", "break", "continue",
+        "class", "extends", "new", "this", "super", "import", "export",
+        "default", "from", "async", "await", "try", "catch", "finally",
+        "throw", "typeof", "instanceof", "in", "of", "true", "false",
+        "null", "undefined", "void", "delete", "yield",
+    )
+)
+_JS_TOKEN_RE = _make_token_re(
+    strings=r"`[^`]*`|\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'",
+    comments=r"//[^\n]*|/\*.*?\*/",
+    keywords=_JS_KEYWORDS,
+)
+
+_SHELL_KEYWORDS = _build_keyword_pattern(
+    (
+        "if", "then", "else", "elif", "fi", "for", "do", "done",
+        "while", "case", "esac", "function", "return", "exit",
+        "echo", "printf", "read", "local", "export", "source",
+        "cd", "ls", "grep", "sed", "awk", "find", "mkdir",
+        "rm", "cp", "mv", "cat", "chmod", "chown",
+    )
+)
+_SHELL_TOKEN_RE = _make_token_re(
+    strings=r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'",
+    comments=r"\#[^\n]*",
+    keywords=_SHELL_KEYWORDS,
+    extra=r"\$\w+|\$\{[^}]+\}",
+)
+
+_RUST_KEYWORDS = _build_keyword_pattern(
+    (
+        "fn", "let", "mut", "pub", "struct", "enum", "impl", "trait",
+        "use", "mod", "crate", "self", "super", "return", "if", "else",
+        "for", "while", "loop", "match", "break", "continue",
+        "async", "await", "move", "where", "type", "const", "static",
+        "true", "false",
+    )
+)
+_RUST_TOKEN_RE = _make_token_re(
+    strings=r"\"(?:[^\"\\]|\\.)*\"",
+    comments=r"//[^\n]*|/\*.*?\*/",
+    keywords=_RUST_KEYWORDS,
+)
+
+_GO_KEYWORDS = _build_keyword_pattern(
+    (
+        "func", "package", "import", "return", "if", "else", "for",
+        "range", "switch", "case", "default", "var", "const", "type",
+        "struct", "interface", "map", "chan", "go", "defer", "select",
+        "break", "continue", "fallthrough", "nil", "true", "false",
+    )
+)
+_GO_TOKEN_RE = _make_token_re(
+    strings=r"\"(?:[^\"\\]|\\.)*\"|`[^`]*`",
+    comments=r"//[^\n]*|/\*.*?\*/",
+    keywords=_GO_KEYWORDS,
+)
+
+# JSON / YAML (kept as ordered substitutions; keys must color before values)
+_JSON_KEY_RE = re.compile(r'"([^"]+)"(\s*:)')
+_JSON_STR_VAL_RE = re.compile(r':\s*"([^"]*)"')
+_JSON_NUM_RE = re.compile(r":\s*(\d+\.?\d*)")
+_JSON_BOOL_RE = re.compile(r"\b(true|false|null)\b")
+_YAML_COMMENT_RE = re.compile(r"(#.*)$")
+_YAML_KEY_RE = re.compile(r"^(\s*)([\w-]+)(:)")
+_YAML_STR_VAL_RE = re.compile(r':\s*"([^"]*)"')
+_YAML_BOOL_RE = re.compile(r"\b(true|false|yes|no|null)\b")
+
+
 def _colorize_code_line(line: str, lang: str) -> str:
     """Colorize a single line of code based on language."""
     lang_lower = lang.lower().strip()
-    color = LANG_COLORS.get(lang_lower, "white")
 
-    # Highlight keywords for common languages
     if lang_lower in ("python", "py"):
-        return _highlight_python(line, color)
-    elif lang_lower in ("javascript", "js", "typescript", "ts"):
-        return _highlight_js(line, color)
-    elif lang_lower in ("bash", "sh", "shell", "zsh"):
-        return _highlight_shell(line, color)
-    elif lang_lower == "json":
+        return _apply_token_re(line, _PY_TOKEN_RE)
+    if lang_lower in ("javascript", "js", "typescript", "ts", "jsx", "tsx"):
+        return _apply_token_re(line, _JS_TOKEN_RE)
+    if lang_lower in ("bash", "sh", "shell", "zsh"):
+        return _apply_token_re(line, _SHELL_TOKEN_RE)
+    if lang_lower == "json":
         return _highlight_json(line)
-    elif lang_lower in ("yaml", "yml"):
+    if lang_lower in ("yaml", "yml"):
         return _highlight_yaml(line)
-    elif lang_lower == "rust":
-        return _highlight_rust(line, color)
-    elif lang_lower == "go":
-        return _highlight_go(line, color)
+    if lang_lower == "rust":
+        return _apply_token_re(line, _RUST_TOKEN_RE)
+    if lang_lower == "go":
+        return _apply_token_re(line, _GO_TOKEN_RE)
 
-    return _c(color, line)
+    return _c(LANG_COLORS.get(lang_lower, "white"), line)
 
 
 def _highlight_python(line: str, base_color: str) -> str:
     """Basic Python syntax highlighting."""
-    keywords = (
-        "def ", "class ", "import ", "from ", "return ", "if ", "elif ", "else:",
-        "for ", "while ", "with ", "as ", "try:", "except ", "finally:",
-        "raise ", "yield ", "lambda ", "pass ", "break ", "continue ",
-        "and ", "or ", "not ", "in ", "is ", "True", "False", "None",
-        "self", "async ", "await ",
-    )
-    decorators = re.compile(r"^(\s*)(@\w+)")
-    strings = re.compile(r'(\"\"\".*?\"\"\"|\'\'\'.*?\'\'\'|"[^"]*"|\'[^\']*\')')
-    comments = re.compile(r"(\s*#.*)$")
-    numbers = re.compile(r"\b(\d+\.?\d*)\b")
-    funcs = re.compile(r"\b(\w+)\s*\(")
-
-    # Handle decorators
-    m = decorators.match(line)
-    if m:
-        return m.group(1) + _magenta(m.group(2)) + _c(base_color, line[m.end():])
-
-    # Handle comments at end
-    cm = comments.search(line)
-    code_part = line[:cm.start()] if cm else line
-    comment_part = cm.group(0) if cm else ""
-
-    result = code_part
-
-    # Strings
-    def replace_string(m):
-        return _yellow(m.group(0))
-    result = strings.sub(replace_string, result)
-
-    # Numbers
-    result = numbers.sub(lambda m: _magenta(m.group(0)), result)
-
-    # Function calls
-    result = funcs.sub(lambda m: _cyan(m.group(1)) + "(", result)
-
-    # Keywords
-    for kw in keywords:
-        result = result.replace(kw, _green(kw))
-
-    if comment_part:
-        result += _dim(comment_part)
-
-    return result
+    return _apply_token_re(line, _PY_TOKEN_RE)
 
 
 def _highlight_js(line: str, base_color: str) -> str:
     """Basic JS/TS syntax highlighting."""
-    keywords = (
-        "const ", "let ", "var ", "function ", "return ", "if ", "else ",
-        "for ", "while ", "do ", "switch ", "case ", "break ", "continue ",
-        "class ", "extends ", "new ", "this ", "super ", "import ", "export ",
-        "default ", "from ", "async ", "await ", "try ", "catch ", "finally ",
-        "throw ", "typeof ", "instanceof ", "in ", "of ", "true", "false",
-        "null", "undefined", "void ", "delete ", "yield ",
-    )
-    strings = re.compile(r'(`[^`]*`|"[^"]*"|\'[^\']*\')')
-    comments = re.compile(r"(//.*$|/\*.*?\*/)")
-    numbers = re.compile(r"\b(\d+\.?\d*)\b")
-    funcs = re.compile(r"\b(\w+)\s*\(")
-
-    cm = comments.search(line)
-    code_part = line[:cm.start()] if cm else line
-    comment_part = cm.group(0) if cm else ""
-
-    result = code_part
-    result = strings.sub(lambda m: _yellow(m.group(0)), result)
-    result = numbers.sub(lambda m: _magenta(m.group(0)), result)
-    result = funcs.sub(lambda m: _cyan(m.group(1)) + "(", result)
-    for kw in keywords:
-        result = result.replace(kw, _green(kw))
-
-    if comment_part:
-        result += _dim(comment_part)
-
-    return result
+    return _apply_token_re(line, _JS_TOKEN_RE)
 
 
 def _highlight_shell(line: str, base_color: str) -> str:
     """Basic shell syntax highlighting."""
-    result = line
-    # Comments
-    if "#" in result and not result.strip().startswith("#"):
-        idx = result.index("#")
-        code = result[:idx]
-        comment = result[idx:]
-        result = _highlight_shell_code(code) + _dim(comment)
-    elif result.strip().startswith("#"):
-        return _dim(result)
-    else:
-        result = _highlight_shell_code(result)
-    return result
-
-
-def _highlight_shell_code(code: str) -> str:
-    """Highlight shell code portion."""
-    keywords = (
-        "if ", "then ", "else ", "elif ", "fi", "for ", "do ", "done",
-        "while ", "case ", "esac", "function ", "return ", "exit ",
-        "echo ", "printf ", "read ", "local ", "export ", "source ",
-        "cd ", "ls ", "grep ", "sed ", "awk ", "find ", "mkdir ",
-        "rm ", "cp ", "mv ", "cat ", "chmod ", "chown ",
-    )
-    strings = re.compile(r'("[^"]*"|\'[^\']*\')')
-    variables = re.compile(r"(\$\w+|\$\{[^}]+\})")
-    numbers = re.compile(r"\b(\d+)\b")
-
-    result = code
-    result = strings.sub(lambda m: _yellow(m.group(0)), result)
-    result = variables.sub(lambda m: _magenta(m.group(0)), result)
-    result = numbers.sub(lambda m: _cyan(m.group(0)), result)
-    for kw in keywords:
-        result = result.replace(kw, _green(kw))
-
-    return result
+    return _apply_token_re(line, _SHELL_TOKEN_RE)
 
 
 def _highlight_json(line: str) -> str:
     """JSON syntax highlighting."""
-    result = line
-    # Keys
-    result = re.sub(r'"([^"]+)"(\s*:)', lambda m: _cyan(f'"{m.group(1)}"') + m.group(2), result)
-    # String values
-    result = re.sub(r':\s*"([^"]*)"', lambda m: ": " + _yellow(f'"{m.group(1)}"'), result)
-    # Numbers
-    result = re.sub(r":\s*(\d+\.?\d*)", lambda m: ": " + _magenta(m.group(1)), result)
-    # Booleans/null
-    result = re.sub(r"\b(true|false|null)\b", lambda m: _green(m.group(0)), result)
-    return result
+    result = _JSON_KEY_RE.sub(
+        lambda m: _c("cyan", f'"{m.group(1)}"') + m.group(2), line
+    )
+    result = _JSON_STR_VAL_RE.sub(
+        lambda m: ": " + _yellow(f'"{m.group(1)}"'), result
+    )
+    result = _JSON_NUM_RE.sub(lambda m: ": " + _magenta(m.group(1)), result)
+    return _JSON_BOOL_RE.sub(lambda m: _green(m.group(0)), result)
 
 
 def _highlight_yaml(line: str) -> str:
     """YAML syntax highlighting."""
     result = line
-    # Comments
-    if "#" in result:
-        idx = result.index("#")
-        code = result[:idx]
-        comment = result[idx:]
-        result = code + _dim(comment)
-    # Keys
-    result = re.sub(r"^(\s*)([\w-]+)(:)", lambda m: m.group(1) + _cyan(m.group(2)) + m.group(3), result)
-    # Strings
-    result = re.sub(r':\s*"([^"]*)"', lambda m: ": " + _yellow(f'"{m.group(1)}"'), result)
-    # Booleans
-    result = re.sub(r"\b(true|false|yes|no|null)\b", lambda m: _green(m.group(0)), result)
-    return result
+    cm = _YAML_COMMENT_RE.search(result)
+    if cm:
+        result = result[: cm.start()] + _dim(cm.group(1))
+    result = _YAML_KEY_RE.sub(
+        lambda m: m.group(1) + _cyan(m.group(2)) + m.group(3), result
+    )
+    result = _YAML_STR_VAL_RE.sub(lambda m: ": " + _yellow(f'"{m.group(1)}"'), result)
+    return _YAML_BOOL_RE.sub(lambda m: _green(m.group(0)), result)
 
 
 def _highlight_rust(line: str, base_color: str) -> str:
     """Basic Rust syntax highlighting."""
-    keywords = (
-        "fn ", "let ", "mut ", "pub ", "struct ", "enum ", "impl ", "trait ",
-        "use ", "mod ", "crate ", "self ", "super ", "return ", "if ", "else ",
-        "for ", "while ", "loop ", "match ", "break ", "continue ",
-        "async ", "await ", "move ", "where ", "type ", "const ", "static ",
-        "true", "false",
-    )
-    strings = re.compile(r'("(?:[^"\\]|\\.)*")')
-    comments = re.compile(r"(//.*$|/\*.*?\*/)")
-    numbers = re.compile(r"\b(\d+\.?\d*)\b")
-
-    cm = comments.search(line)
-    code_part = line[:cm.start()] if cm else line
-    comment_part = cm.group(0) if cm else ""
-
-    result = code_part
-    result = strings.sub(lambda m: _yellow(m.group(0)), result)
-    result = numbers.sub(lambda m: _magenta(m.group(0)), result)
-    for kw in keywords:
-        result = result.replace(kw, _green(kw))
-
-    if comment_part:
-        result += _dim(comment_part)
-
-    return result
+    return _apply_token_re(line, _RUST_TOKEN_RE)
 
 
 def _highlight_go(line: str, base_color: str) -> str:
     """Basic Go syntax highlighting."""
-    keywords = (
-        "func ", "package ", "import ", "return ", "if ", "else ", "for ",
-        "range ", "switch ", "case ", "default ", "var ", "const ", "type ",
-        "struct ", "interface ", "map ", "chan ", "go ", "defer ", "select ",
-        "break ", "continue ", "fallthrough ", "nil", "true", "false",
-    )
-    strings = re.compile(r'("(?:[^"\\]|\\.)*"|`[^`]*`)')
-    comments = re.compile(r"(//.*$|/\*.*?\*/)")
-    numbers = re.compile(r"\b(\d+\.?\d*)\b")
+    return _apply_token_re(line, _GO_TOKEN_RE)
 
-    cm = comments.search(line)
-    code_part = line[:cm.start()] if cm else line
-    comment_part = cm.group(0) if cm else ""
 
-    result = code_part
-    result = strings.sub(lambda m: _yellow(m.group(0)), result)
-    result = numbers.sub(lambda m: _magenta(m.group(0)), result)
-    for kw in keywords:
-        result = result.replace(kw, _green(kw))
-
-    if comment_part:
-        result += _dim(comment_part)
-
-    return result
+# Block-level patterns used by format_markdown
+_HR_RE = re.compile(r"^[-*_]{3,}\s*$")
+_ULIST_RE = re.compile(r"^(\s*)([-*+])\s+(.+)$")
+_OLIST_RE = re.compile(r"^(\s*)(\d+[.)])\s+(.+)$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+# Inline markdown patterns (compiled once at import time)
+_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_INLINE_BOLD_ITALIC_RE = re.compile(r"\*\*\*(.+?)\*\*\*|___(.+?)___")
+_INLINE_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_INLINE_ITALIC_RE = re.compile(r"\*(.+?)\*|_(.+?)_")
+_INLINE_STRIKE_RE = re.compile(r"~~(.+?)~~")
+_INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_INLINE_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 def _format_inline(text: str) -> str:
@@ -341,35 +342,30 @@ def _format_inline(text: str) -> str:
     result = text
 
     # Inline code (must be first to avoid interference)
-    result = re.sub(r"`([^`]+)`", lambda m: _colorize_inline_code(m.group(1)), result)
+    result = _INLINE_CODE_RE.sub(lambda m: _colorize_inline_code(m.group(1)), result)
 
     # Bold + Italic
-    result = re.sub(r"\*\*\*(.+?)\*\*\*", lambda m: _bold(_c("white", m.group(1))), result)
-    result = re.sub(r"___(.+?)___", lambda m: _bold(_c("white", m.group(1))), result)
-
-    # Bold
-    result = re.sub(r"\*\*(.+?)\*\*", lambda m: _bold(m.group(1)), result)
-    result = re.sub(r"__(.+?)__", lambda m: _bold(m.group(1)), result)
-
-    # Italic
-    result = re.sub(r"\*(.+?)\*", lambda m: _c("white", m.group(1)), result)
-    result = re.sub(r"_(.+?)_", lambda m: _c("white", m.group(1)), result)
-
-    # Strikethrough
-    result = re.sub(r"~~(.+?)~~", lambda m: _dim(m.group(1)), result)
-
-    # Links [text](url)
-    result = re.sub(
-        r"\[([^\]]+)\]\(([^)]+)\)",
-        lambda m: _cyan(m.group(1)) + _dim(f" ({m.group(2)})"),
-        result,
+    result = _INLINE_BOLD_ITALIC_RE.sub(
+        lambda m: _bold(_c("white", m.group(1) or m.group(2))), result
     )
 
-    # Images ![alt](url) → show as dimmed link
-    result = re.sub(
-        r"!\[([^\]]*)\]\(([^)]+)\)",
-        lambda m: _dim(f"[image: {m.group(1) or m.group(2)}]"),
-        result,
+    # Bold
+    result = _INLINE_BOLD_RE.sub(lambda m: _bold(m.group(1) or m.group(2)), result)
+
+    # Italic
+    result = _INLINE_ITALIC_RE.sub(lambda m: _c("white", m.group(1) or m.group(2)), result)
+
+    # Strikethrough
+    result = _INLINE_STRIKE_RE.sub(lambda m: _dim(m.group(1)), result)
+
+    # Images ![alt](url) → show as dimmed link (before links so ! is consumed)
+    result = _INLINE_IMAGE_RE.sub(
+        lambda m: _dim(f"[image: {m.group(1) or m.group(2)}]"), result
+    )
+
+    # Links [text](url)
+    result = _INLINE_LINK_RE.sub(
+        lambda m: _cyan(m.group(1)) + _dim(f" ({m.group(2)})"), result
     )
 
     return result
@@ -434,7 +430,7 @@ def format_markdown(text: str, file: TextIO | None = None) -> str:
             continue
 
         # Horizontal rule
-        if re.match(r"^[-*_]{3,}\s*$", line.strip()):
+        if _HR_RE.match(line.strip()):
             output_lines.append(_dim("─" * 50))
             i += 1
             continue
@@ -447,7 +443,7 @@ def format_markdown(text: str, file: TextIO | None = None) -> str:
             continue
 
         # Unordered list
-        m = re.match(r"^(\s*)([-*+])\s+(.+)$", line)
+        m = _ULIST_RE.match(line)
         if m:
             indent = m.group(1)
             bullet = m.group(2)
@@ -458,7 +454,7 @@ def format_markdown(text: str, file: TextIO | None = None) -> str:
             continue
 
         # Ordered list
-        m = re.match(r"^(\s*)(\d+[.)])\s+(.+)$", line)
+        m = _OLIST_RE.match(line)
         if m:
             indent = m.group(1)
             num = m.group(2)
@@ -471,7 +467,7 @@ def format_markdown(text: str, file: TextIO | None = None) -> str:
         # Table (simple support)
         if "|" in line and line.strip().startswith("|"):
             # Skip separator lines
-            if re.match(r"^\s*\|[\s:|-]+\|\s*$", line):
+            if _TABLE_SEP_RE.match(line):
                 i += 1
                 continue
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
